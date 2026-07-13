@@ -37,6 +37,7 @@ struct SettingsScreen: View {
         }
         .background(Color.svBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .task { await viewModel.onAppear() }
         .blur(radius: (showLogoutConfirmation || showDeleteConfirmation) ? 2 : 0)
         .animation(.easeInOut(duration: 0.2), value: showLogoutConfirmation)
         .animation(.easeInOut(duration: 0.2), value: showDeleteConfirmation)
@@ -111,18 +112,18 @@ struct SettingsScreen: View {
     // MARK: - Restaurant Card
     private var restaurantCard: some View {
         HStack(spacing: SvSpacing.lg) {
-            Image(viewModel.restaurantAvatarName)
-                .resizable()
-                .scaledToFill()
+            restaurantAvatar
                 .frame(width: 56, height: 56)
                 .clipShape(Circle())
-            
+
             VStack(alignment: .leading, spacing: SvSpacing.xxs) {
-                Text(viewModel.restaurantName)
+                Text(viewModel.profile?.name ?? "Restaurant Name")
                     .font(SvFont.titleMedium)
                     .foregroundStyle(Color.svOnBackground)
+                    .redacted(reason: viewModel.profile == nil ? .placeholder : [])
                 
                 Button {
+                    router.navigate(to: .editRestaurant)
                 } label: {
                     HStack(spacing: SvSpacing.xxs) {
                         Text("Edit restaurant")
@@ -153,6 +154,24 @@ struct SettingsScreen: View {
             }
         )
     }
+
+    @ViewBuilder
+    private var restaurantAvatar: some View {
+        if let url = viewModel.profile?.imageURL {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Circle().fill(Color.svShimmer)
+            }
+        } else if viewModel.profile == nil {
+            // Still loading — shimmer instead of the bundled fallback avatar, so the real photo
+            // doesn't visibly replace a different-looking placeholder image once it arrives.
+            Circle().fill(Color.svShimmer).redacted(reason: .placeholder)
+        } else {
+            // Profile loaded and confirmed to have no restaurant photo.
+            Image("SampleRestaurantAvatar").resizable().scaledToFill()
+        }
+    }
     // MARK: - General Section
     
     private var generalSection: some View {
@@ -178,6 +197,18 @@ struct SettingsScreen: View {
     
     private var accountSection: some View {
         sectionCard(label: "Account") {
+            settingsRow(
+                icon: "lock.fill",
+                title: "Change Password",
+                isSystemIcon: true
+            ) {
+                router.navigate(to: .changePassword)
+            }
+
+            Divider()
+                .background(Color.svDivider)
+                .padding(.leading, SvSpacing.lg + 22 + SvSpacing.md)
+
             settingsRow(
                 icon: "DeleteAccount",
                 title: "Delete Account"
@@ -242,15 +273,21 @@ struct SettingsScreen: View {
     private func settingsRow(
         icon: String,
         title: LocalizedStringKey,
+        isSystemIcon: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: SvSpacing.md) {
-                Image(icon)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(Color.svOnBackground)
-                    .frame(width: 20, height: 22)
+                Group {
+                    if isSystemIcon {
+                        Image(systemName: icon).resizable()
+                    } else {
+                        Image(icon).resizable()
+                    }
+                }
+                .scaledToFit()
+                .foregroundStyle(Color.svOnBackground)
+                .frame(width: 20, height: 22)
                 Text(title)
                     .font(SvFont.body)
                     .foregroundStyle(Color.svOnBackground)

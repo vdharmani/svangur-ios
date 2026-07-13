@@ -97,6 +97,10 @@ private struct RootView: View {
             ProfileScreen(viewModel: container.makeProfileViewModel(userId: userId))
         case .settings:
             SettingsScreen(viewModel: container.makeSettingsViewModel())
+        case .changePassword:
+            ChangePasswordScreen(viewModel: container.makeChangePasswordViewModel())
+        case .editRestaurant:
+            EditRestaurantScreen(viewModel: container.makeEditRestaurantViewModel())
         case .onboarding:
             Text("Onboarding")
         case .dashboard:

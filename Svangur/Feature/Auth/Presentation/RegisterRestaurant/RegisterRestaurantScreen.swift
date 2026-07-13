@@ -749,8 +749,8 @@ private struct SvCompactToggle: View {
         } label: {
             ZStack {
                 Capsule()
-                    .fill(isOn ? Color.svPrimary : Color(.systemGray4))
-                
+                    .fill(isOn ? Color.svPrimary : Color(red: 0.35, green: 0.76, blue: 0.42))
+
                 Circle()
                     .fill(Color.white)
                     .frame(width: thumbSize, height: thumbSize)

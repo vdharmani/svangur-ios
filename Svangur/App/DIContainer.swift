@@ -10,6 +10,7 @@ final class DIContainer: Sendable {
     let locationService: LocationServiceProtocol
     let placesService: PlacesServiceProtocol
     private let sharedAuthRepository: AuthRepositoryProtocol
+    private let sharedOfferRepository: OfferRepositoryProtocol
 
     init(
         apiClient: APIClientProtocol? = nil,
@@ -29,6 +30,7 @@ final class DIContainer: Sendable {
         let resolvedApiClient = apiClient ?? APIClient(keychain: keychainManager)
         self.apiClient = resolvedApiClient
         self.sharedAuthRepository = AuthRepositoryImpl(apiClient: resolvedApiClient, keychain: keychainManager)
+        self.sharedOfferRepository = OfferRepositoryImpl(apiClient: resolvedApiClient)
     }
 
     // MARK: - Feature: Auth
@@ -146,7 +148,10 @@ final class DIContainer: Sendable {
 
     @MainActor
     func makeSettingsViewModel() -> SettingsViewModel {
-        SettingsViewModel(logoutUseCase: makeLogoutUseCase())
+        SettingsViewModel(
+            logoutUseCase: makeLogoutUseCase(),
+            getRestaurantProfileUseCase: makeGetRestaurantProfileUseCase()
+        )
     }
 
     @MainActor
@@ -173,8 +178,6 @@ final class DIContainer: Sendable {
     }
 
     // MARK: - Feature: Offers
-
-    private let sharedOfferRepository: OfferRepositoryProtocol = MockOfferRepository()
 
     func makeOfferRepository() -> OfferRepositoryProtocol {
         sharedOfferRepository
@@ -218,7 +221,8 @@ final class DIContainer: Sendable {
     func makeDashboardViewModel() -> DashboardViewModel {
         DashboardViewModel(
             getMyOffersUseCase: makeGetMyOffersUseCase(),
-            deleteOfferUseCase: makeDeleteOfferUseCase()
+            deleteOfferUseCase: makeDeleteOfferUseCase(),
+            getRestaurantProfileUseCase: makeGetRestaurantProfileUseCase()
         )
     }
 
@@ -283,6 +287,18 @@ final class DIContainer: Sendable {
         ChangePasswordRepositoryImpl(apiClient: apiClient)
     }
 
+    func makeChangePasswordUseCase() -> ChangePasswordUseCaseProtocol {
+        ChangePasswordUseCase(changePasswordRepository: makeChangePasswordRepository())
+    }
+
+    @MainActor
+    func makeChangePasswordViewModel() -> ChangePasswordViewModel {
+        ChangePasswordViewModel(
+            changePasswordUseCase: makeChangePasswordUseCase(),
+            validate: makeValidateCredentialsUseCase()
+        )
+    }
+
     // MARK: - Feature: Settings — Delete Account
 
     func makeDeleteAccountRepository() -> DeleteAccountRepositoryProtocol {
@@ -293,6 +309,22 @@ final class DIContainer: Sendable {
 
     func makeEditRestaurantRepository() -> EditRestaurantRepositoryProtocol {
         EditRestaurantRepositoryImpl(apiClient: apiClient)
+    }
+
+    func makeGetRestaurantProfileUseCase() -> GetRestaurantProfileUseCaseProtocol {
+        GetRestaurantProfileUseCase(editRestaurantRepository: makeEditRestaurantRepository())
+    }
+
+    func makeUpdateRestaurantProfileUseCase() -> UpdateRestaurantProfileUseCaseProtocol {
+        UpdateRestaurantProfileUseCase(editRestaurantRepository: makeEditRestaurantRepository())
+    }
+
+    @MainActor
+    func makeEditRestaurantViewModel() -> EditRestaurantViewModel {
+        EditRestaurantViewModel(
+            getProfileUseCase: makeGetRestaurantProfileUseCase(),
+            updateProfileUseCase: makeUpdateRestaurantProfileUseCase()
+        )
     }
 
     // MARK: - Core: Token Refresh

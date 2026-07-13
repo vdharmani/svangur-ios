@@ -9,6 +9,8 @@ enum AppRoute: Hashable, Sendable {
     case restaurantDetail(restaurantId: Int64)
     case profile(userId: String)
     case settings
+    case changePassword
+    case editRestaurant
     case onboarding
 
     // MARK: - Offers (owner)

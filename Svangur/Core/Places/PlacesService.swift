@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import GooglePlacesSwift
 
 protocol PlacesServiceProtocol: Sendable {
@@ -6,6 +7,11 @@ protocol PlacesServiceProtocol: Sendable {
     /// internal Places session until `resetSession()` is called, so Google bills a whole
     /// search as a single session rather than per-keystroke.
     func autocomplete(query: String) async throws(AppError) -> [PlaceSuggestion]
+    /// Full details (city, country, coordinate) for one autocomplete suggestion, fetched by its
+    /// `PlaceSuggestion.id` (a Google Places `place_id`) — call after the user picks a
+    /// suggestion, before `resetSession()`, so the Details call bills as part of the same
+    /// Autocomplete session rather than a new one.
+    func placeDetails(placeID: String) async throws(AppError) -> PlaceDetails
     /// Starts a fresh billing session — call after a suggestion is selected or a search is
     /// abandoned, so the next search isn't billed as a continuation of this one.
     func resetSession() async
@@ -26,6 +32,31 @@ actor PlacesService: PlacesServiceProtocol {
                 // `legacyAttributedFullText` (NSAttributedString), so unwrap its plain `.string`.
                 return PlaceSuggestion(id: place.placeID, description: place.legacyAttributedFullText.string)
             }
+        case .failure(let error):
+            throw error.toAppError()
+        }
+    }
+
+    func placeDetails(placeID: String) async throws(AppError) -> PlaceDetails {
+        let request = FetchPlaceRequest(
+            placeID: placeID,
+            placeProperties: [.formattedAddress, .addressComponents, .coordinate],
+            sessionToken: sessionToken
+        )
+        let result = await PlacesClient.shared.fetchPlace(with: request)
+        switch result {
+        case .success(let place):
+            let components = place.addressComponents ?? []
+            let city = components.first { $0.types.contains(.locality) }?.name
+                ?? components.first { $0.types.contains(.postalTown) }?.name
+            let country = components.first { $0.types.contains(.country) }?.name
+            return PlaceDetails(
+                formattedAddress: place.formattedAddress,
+                city: city,
+                country: country,
+                latitude: place.location.latitude,
+                longitude: place.location.longitude
+            )
         case .failure(let error):
             throw error.toAppError()
         }

@@ -86,35 +86,75 @@ struct DashboardScreen: View {
 
     // MARK: - Restaurant Header
 
+    @ViewBuilder
     private var restaurantHeader: some View {
+        if let profile = viewModel.profile {
+            VStack(alignment: .leading, spacing: SvSpacing.md) {
+                HStack(alignment: .center, spacing: SvSpacing.md) {
+                    restaurantImage(profile)
+                        .frame(width: 82, height: 82)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.svPrimary, lineWidth: 1.5)
+                                .padding(-2)
+                        )
+
+                    VStack(alignment: .leading, spacing: SvSpacing.md){
+                        Text(profile.name)
+                            .font(SvFont.mainLabel)
+                            .foregroundStyle(Color.black)
+                        statsRow
+                    }
+                }
+                Text(profile.description)
+                    .font(SvFont.editLink)
+                    .foregroundStyle(Color.svSecondary)
+                    .padding(.top, SvSpacing.sm)
+            }
+            .padding(.horizontal, SvSpacing.screenPadding)
+            .padding(.top, SvSpacing.lg)
+        } else {
+            restaurantHeaderSkeleton
+        }
+    }
+
+    @ViewBuilder
+    private func restaurantImage(_ profile: RestaurantProfileUi) -> some View {
+        if let url = profile.imageURL {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Color.svImagePlaceholder
+            }
+        } else {
+            Color.svImagePlaceholder
+        }
+    }
+
+    private var restaurantHeaderSkeleton: some View {
         VStack(alignment: .leading, spacing: SvSpacing.md) {
             HStack(alignment: .center, spacing: SvSpacing.md) {
-                Image("SampleOfferPizza")
-                    .resizable()
-                    .scaledToFill()
+                Circle()
+                    .fill(Color.svShimmer)
                     .frame(width: 82, height: 82)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.svPrimary, lineWidth: 1.5)
-                            .padding(-2)
-                    )
-                
-                VStack(alignment: .leading, spacing: SvSpacing.md){
-                    Text("The Golden Fork")
-                        .font(SvFont.mainLabel)
-                        .foregroundStyle(Color.black)
-                    statsRow
-                    
+                VStack(alignment: .leading, spacing: SvSpacing.sm) {
+                    RoundedRectangle(cornerRadius: SvSpacing.xs)
+                        .fill(Color.svShimmer)
+                        .frame(width: 140, height: 18)
+                    RoundedRectangle(cornerRadius: SvSpacing.xs)
+                        .fill(Color.svShimmer)
+                        .frame(width: 200, height: 14)
                 }
             }
-            Text("A perfect place for great food, warm vibes, and special offers.")
-                .font(SvFont.editLink)
-                .foregroundStyle(Color.svSecondary)
+            RoundedRectangle(cornerRadius: SvSpacing.xs)
+                .fill(Color.svShimmer)
+                .frame(height: 14)
                 .padding(.top, SvSpacing.sm)
         }
         .padding(.horizontal, SvSpacing.screenPadding)
         .padding(.top, SvSpacing.lg)
+        .redacted(reason: .placeholder)
     }
 
     private var statsRow: some View {

@@ -11,6 +11,7 @@ protocol ValidateCredentialsUseCaseProtocol: Sendable {
     func validateLogin(email: String, password: String) -> CredentialsValidation
     func validateRegistration(_ input: RegistrationValidationInput) -> RegistrationValidation
     func validateNewPassword(_ password: String, confirm: String) -> NewPasswordValidation
+    func validateChangePassword(current: String, new: String, confirm: String) -> ChangePasswordValidation
     func validateEmailFormat(_ email: String) -> ValidationError?
     func validatePhoneNumber(_ phone: String) -> ValidationError?
 }
@@ -63,6 +64,14 @@ struct NewPasswordValidation: Sendable, Equatable {
     var isValid: Bool { password == nil && confirm == nil }
 }
 
+struct ChangePasswordValidation: Sendable, Equatable {
+    var currentPassword: ValidationError?
+    var newPassword: ValidationError?
+    var confirmPassword: ValidationError?
+
+    var isValid: Bool { currentPassword == nil && newPassword == nil && confirmPassword == nil }
+}
+
 final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Sendable {
     static let passwordMinLength = 8
     static let restaurantNameMinLength = 2
@@ -105,6 +114,14 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
         NewPasswordValidation(
             password: validatePasswordStrength(password),
             confirm: validateConfirmPassword(confirm, matches: password)
+        )
+    }
+
+    func validateChangePassword(current: String, new: String, confirm: String) -> ChangePasswordValidation {
+        ChangePasswordValidation(
+            currentPassword: current.isEmpty ? .empty : nil,
+            newPassword: validatePasswordStrength(new),
+            confirmPassword: validateConfirmPassword(confirm, matches: new)
         )
     }
 

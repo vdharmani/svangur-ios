@@ -136,13 +136,24 @@ final class RegisterRestaurantViewModel {
     // MARK: - Address autocomplete
 
     /// User tapped a Places suggestion — replaces the typed text with the full formatted
-    /// address, clears the dropdown, and starts a fresh billing session for the next search.
+    /// address, clears the dropdown, and fetches that place's city/country/coordinate so they
+    /// reflect the address actually picked rather than the device's current GPS location.
     func selectAddressSuggestion(_ suggestion: PlaceSuggestion) {
         addressSearchTask?.cancel()
         lastSelectedAddress = suggestion.description
         address = suggestion.description
         addressSuggestions = []
-        Task { await placesService.resetSession() }
+        Task {
+            if let details = try? await placesService.placeDetails(placeID: suggestion.id) {
+                if let city = details.city { self.city = city }
+                if let country = details.country { self.country = country }
+                capturedLatitude = details.latitude
+                capturedLongitude = details.longitude
+            }
+            // Billed as part of the session that started with the autocomplete search —
+            // reset only now, after the Details call, so the next search starts fresh.
+            await placesService.resetSession()
+        }
     }
 
     private func scheduleAddressSearch() {
@@ -369,6 +380,15 @@ private struct FakeLocationService: LocationServiceProtocol {
 private struct FakePlacesService: PlacesServiceProtocol {
     func autocomplete(query: String) async throws(AppError) -> [PlaceSuggestion] {
         [PlaceSuggestion(id: "1", description: "\(query), Reykjavik, Iceland")]
+    }
+    func placeDetails(placeID: String) async throws(AppError) -> PlaceDetails {
+        PlaceDetails(
+            formattedAddress: "Laugavegur 1, 101 Reykjavik, Iceland",
+            city: "Reykjavik",
+            country: "Iceland",
+            latitude: 64.1466,
+            longitude: -21.9426
+        )
     }
     func resetSession() async {}
 }
