@@ -16,7 +16,11 @@ final class RequestPasswordResetUseCase: RequestPasswordResetUseCaseProtocol, Se
 
     func execute(email: String) async throws(AppError) {
         if let error = validate.validateEmailFormat(email) {
-            throw .validation(message: error == .empty ? "auth.error.email_required" : "auth.error.email_format")
+            throw .validation(
+                message: error == .empty
+                    ? "Please enter your email address."
+                    : "Please enter a valid email address."
+            )
         }
         try await authRepository.requestPasswordReset(email: email)
     }

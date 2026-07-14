@@ -31,8 +31,10 @@ struct AddOfferScreen: View {
         Group {
             switch viewModel.loadState {
             case .loadingExisting:
-                ProgressView("Loading…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    customHeader
+                    AddOfferFormSkeleton()
+                }
 
             case .ready, .saving:
                 form
@@ -225,7 +227,7 @@ struct AddOfferScreen: View {
                     }
                 }
             HStack {
-                FieldErrorText(error: viewModel.displayError(for: .title))
+                FieldErrorText(field: .title, error: viewModel.displayError(for: .title))
                 Spacer()
             }
         }
@@ -250,7 +252,7 @@ struct AddOfferScreen: View {
                 }
             }
             HStack {
-                FieldErrorText(error: viewModel.displayError(for: .description))
+                FieldErrorText(field: .description, error: viewModel.displayError(for: .description))
                 Spacer()
             }
         }
@@ -265,7 +267,7 @@ struct AddOfferScreen: View {
                 value: categoryDisplayName(for: viewModel.draft.categoryId),
                 onTap: { showCategorySheet = true }
             )
-            FieldErrorText(error: viewModel.displayError(for: .category))
+            FieldErrorText(field: .category, error: viewModel.displayError(for: .category))
         }
         .padding(.top, -12)
     }
@@ -278,7 +280,7 @@ struct AddOfferScreen: View {
                 value: discountDisplayValue,
                 onTap: { showDiscountSheet = true }
             )
-            FieldErrorText(error: viewModel.displayError(for: .discount))
+            FieldErrorText(field: .discount, error: viewModel.displayError(for: .discount))
         }
     }
 
@@ -286,15 +288,15 @@ struct AddOfferScreen: View {
         VStack(alignment: .leading, spacing: SvSpacing.lg) {
             sectionLabel("Valid Days")
             HStack(spacing: SvSpacing.sm) {
-                ForEach(Weekday.allCases) { day in
+                ForEach(viewModel.days, id: \.key) { dayItem in
                     DayChip(
-                        day: day,
-                        isSelected: viewModel.draft.validDays.contains(day),
-                        onTap: { viewModel.toggleValidDay(day) }
+                        dayItem: dayItem,
+                        isSelected: viewModel.isDaySelected(dayItem),
+                        onTap: { viewModel.toggleValidDay(dayItem) }
                     )
                 }
             }
-            FieldErrorText(error: viewModel.displayError(for: .validDays))
+            FieldErrorText(field: .validDays, error: viewModel.displayError(for: .validDays))
         }
     }
 
@@ -320,7 +322,7 @@ struct AddOfferScreen: View {
                     }
                 ))
             }
-            FieldErrorText(error: viewModel.displayError(for: .validTime))
+            FieldErrorText(field: .validTime, error: viewModel.displayError(for: .validTime))
         }
     }
 
@@ -386,6 +388,69 @@ struct AddOfferScreen: View {
     }
 }
 
+// MARK: - Loading Skeleton
+
+/// Shaped like `form` (images row, title, description, category, discount, day chips, time
+/// range) so the edit-mode loading state reads as "this screen is loading" rather than a jarring
+/// blank-then-filled swap — matches this app's skeleton/shimmer convention for initial loads.
+private struct AddOfferFormSkeleton: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SvSpacing.sectionSpacing) {
+                imagesRow
+                fieldBlock(labelWidth: 90, fieldHeight: SvSpacing.inputHeight)
+                fieldBlock(labelWidth: 130, fieldHeight: 90)
+                fieldBlock(labelWidth: 70, fieldHeight: SvSpacing.inputHeight)
+                fieldBlock(labelWidth: 70, fieldHeight: SvSpacing.inputHeight)
+                dayChipsRow
+                fieldBlock(labelWidth: 80, fieldHeight: 48)
+            }
+            .padding(.horizontal, SvSpacing.screenPadding)
+            .padding(.top, SvSpacing.sm)
+        }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
+    }
+
+    private var imagesRow: some View {
+        HStack(spacing: SvSpacing.md) {
+            ForEach(0..<3, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                    .fill(Color.svShimmer)
+                    .frame(width: 118, height: 118)
+            }
+        }
+    }
+
+    private func fieldBlock(labelWidth: CGFloat, fieldHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 13) {
+            RoundedRectangle(cornerRadius: SvSpacing.xs)
+                .fill(Color.svShimmer)
+                .frame(width: labelWidth, height: 14)
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .fill(Color.svShimmer)
+                .frame(maxWidth: .infinity)
+                .frame(height: fieldHeight)
+        }
+    }
+
+    private var dayChipsRow: some View {
+        VStack(alignment: .leading, spacing: SvSpacing.lg) {
+            RoundedRectangle(cornerRadius: SvSpacing.xs)
+                .fill(Color.svShimmer)
+                .frame(width: 80, height: 14)
+            HStack(spacing: SvSpacing.sm) {
+                ForEach(0..<7, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                        .fill(Color.svShimmer)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Reusable Form Components
 
 private struct SvFieldStyle: TextFieldStyle {
@@ -430,13 +495,13 @@ private struct DropdownButton: View {
 }
 
 private struct DayChip: View {
-    let day: Weekday
+    let dayItem: DayItem
     let isSelected: Bool
     let onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
-            Text(shortName)
+            Text(dayItem.shortLabel)
                 .font(SvFont.bodySmallStrong)
                 .foregroundStyle(isSelected ? Color.svOnPrimary : Color.svOnBackground)
                 .frame(maxWidth: .infinity)
@@ -458,32 +523,8 @@ private struct DayChip: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(longName)
+        .accessibilityLabel(dayItem.label)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private var shortName: String {
-        switch day {
-        case .monday:    return "Mon"
-        case .tuesday:   return "Tue"
-        case .wednesday: return "Wed"
-        case .thursday:  return "Thu"
-        case .friday:    return "Fri"
-        case .saturday:  return "Sat"
-        case .sunday:    return "Sun"
-        }
-    }
-
-    private var longName: String {
-        switch day {
-        case .monday:    return "Monday"
-        case .tuesday:   return "Tuesday"
-        case .wednesday: return "Wednesday"
-        case .thursday:  return "Thursday"
-        case .friday:    return "Friday"
-        case .saturday:  return "Saturday"
-        case .sunday:    return "Sunday"
-        }
     }
 }
 
@@ -544,6 +585,7 @@ private struct TimePickerField: View {
 }
 
 private struct FieldErrorText: View {
+    let field: AddOfferField
     let error: ValidationError?
 
     var body: some View {
@@ -556,11 +598,22 @@ private struct FieldErrorText: View {
 
     private func message(for error: ValidationError) -> LocalizedStringKey {
         switch error {
-        case .empty:                return "form.error.empty"
+        case .empty:                return emptyMessage
         case .tooShort(let min):    return "Must be at least \(min) characters"
         case .tooLong(let max):     return "Must be \(max) characters or fewer"
-        case .invalidFormat:        return "form.error.invalid_format"
-        case .custom(let key):      return LocalizedStringKey(key)
+        case .invalidFormat:        return "Please enter a valid value"
+        case .custom:               return "End time must be after start time"
+        }
+    }
+
+    private var emptyMessage: LocalizedStringKey {
+        switch field {
+        case .title:       return "Please enter an offer title"
+        case .description: return "Please enter an offer description"
+        case .category:    return "Please select a category"
+        case .discount:    return "Please select a discount"
+        case .validDays:   return "Please select at least one valid day"
+        case .validTime:   return "Please choose a valid time range"
         }
     }
 }

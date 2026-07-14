@@ -9,7 +9,7 @@ actor MockAuthRepository: AuthRepositoryProtocol {
     func login(credentials: Credentials) async throws(AppError) -> AuthToken {
         try? await Task.sleep(for: .milliseconds(900))
         guard credentials.email == validEmail, credentials.password == validPassword else {
-            throw .unauthorized(message: "auth.error.bad_credentials")
+            throw .unauthorized(message: "Invalid email or password.")
         }
         let token = Self.makeToken(for: credentials.email)
         currentTokenValue = token
@@ -19,7 +19,7 @@ actor MockAuthRepository: AuthRepositoryProtocol {
     func registerRestaurant(_ registration: RestaurantRegistration) async throws(AppError) {
         try? await Task.sleep(for: .milliseconds(900))
         guard registration.email != validEmail else {
-            throw .validation(message: "auth.error.email_taken")
+            throw .validation(message: "This email is already registered.")
         }
         // Per option (a): stub success — real submission is async-approved by admin.
     }
@@ -37,7 +37,7 @@ actor MockAuthRepository: AuthRepositoryProtocol {
     func resetPassword(_ request: PasswordResetToken) async throws(AppError) {
         try? await Task.sleep(for: .milliseconds(700))
         guard request.token == "demo-token" else {
-            throw .validation(message: "auth.error.invalid_reset_token")
+            throw .validation(message: "This reset link is invalid or has expired.")
         }
     }
 

@@ -172,9 +172,9 @@ struct ForgotPasswordScreen: View {
     private func errorKey(for error: ValidationError?) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
-        case .empty:         return "form.error.empty"
-        case .invalidFormat: return "auth.error.email_format"
-        default:             return "form.error.invalid_format"
+        case .empty:         return "Please enter your email address"
+        case .invalidFormat: return "Please enter a valid email address"
+        default:             return "Please enter a valid value"
         }
     }
 }

@@ -7,12 +7,17 @@ final class OfferRepositoryImpl: OfferRepositoryProtocol, Sendable {
         self.apiClient = apiClient
     }
 
-    func getMyOffers() async throws(AppError) -> [Offer] {
+    func getMyOffers(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
         try await apiCall {
             let envelope: OfferListEnvelopeDTO = try await apiClient.execute(
-                OfferEndpoint.listOffers(page: 1, limit: 50)
+                OfferEndpoint.listOffers(page: page, limit: limit)
             )
-            return envelope.data.items.map { $0.toDomain() }
+            let payload = envelope.data
+            return PaginatedResult(
+                items: payload.items.map { $0.toDomain() },
+                hasNextPage: payload.page < payload.totalPages,
+                nextPage: payload.page < payload.totalPages ? payload.page + 1 : nil
+            )
         }
     }
 

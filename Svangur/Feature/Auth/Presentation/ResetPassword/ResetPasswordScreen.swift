@@ -197,10 +197,10 @@ struct ResetPasswordScreen: View {
     private func errorKey(for error: ValidationError?) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
-        case .empty:           return "form.error.empty"
+        case .empty:           return "This field is required"
         case .tooShort(let m): return "Must be at least \(m) characters"
         case .tooLong(let m):  return "Must be \(m) characters or fewer"
-        case .invalidFormat:   return "form.error.invalid_format"
+        case .invalidFormat:   return "Please enter a valid value"
         case .custom(let key): return LocalizedStringKey(key)
         }
     }

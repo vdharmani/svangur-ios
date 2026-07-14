@@ -64,7 +64,7 @@ final class ValidateOfferDraftUseCase: ValidateOfferDraftUseCaseProtocol, Sendab
         }
 
         if draft.validTimeEnd <= draft.validTimeStart {
-            errors.validTime = .custom(messageKey: "form.error.end_before_start")
+            errors.validTime = .custom(messageKey: "End time must be after start time")
         }
 
         return errors

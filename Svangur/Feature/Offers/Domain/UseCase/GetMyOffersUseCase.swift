@@ -1,5 +1,5 @@
 protocol GetMyOffersUseCaseProtocol: Sendable {
-    func execute() async throws(AppError) -> [Offer]
+    func execute(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer>
 }
 
 final class GetMyOffersUseCase: GetMyOffersUseCaseProtocol, Sendable {
@@ -9,7 +9,7 @@ final class GetMyOffersUseCase: GetMyOffersUseCaseProtocol, Sendable {
         self.offerRepository = offerRepository
     }
 
-    func execute() async throws(AppError) -> [Offer] {
-        try await offerRepository.getMyOffers()
+    func execute(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
+        try await offerRepository.getMyOffers(page: page, limit: limit)
     }
 }

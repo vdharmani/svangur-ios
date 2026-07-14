@@ -11,9 +11,18 @@ actor MockOfferRepository: OfferRepositoryProtocol {
         self.nextId = (seed.map(\.id).max() ?? 0) + 1
     }
 
-    func getMyOffers() async throws(AppError) -> [Offer] {
+    func getMyOffers(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
         try? await Task.sleep(for: .milliseconds(600))
-        return store.values.sorted { $0.id > $1.id }
+        let sorted = store.values.sorted { $0.id > $1.id }
+        let startIndex = min((page - 1) * limit, sorted.count)
+        let endIndex = min(startIndex + limit, sorted.count)
+        let pageItems = Array(sorted[startIndex..<endIndex])
+        let hasNextPage = endIndex < sorted.count
+        return PaginatedResult(
+            items: pageItems,
+            hasNextPage: hasNextPage,
+            nextPage: hasNextPage ? page + 1 : nil
+        )
     }
 
     func getOffer(id: Int64) async throws(AppError) -> Offer {

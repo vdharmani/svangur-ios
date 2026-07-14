@@ -67,8 +67,27 @@ extension OwnerOfferListItemDTO {
             heroImageUrl: heroURL,
             imageUrls: mappedImageUrls,
             imageIds: images.map { String($0.id) },
-            views: 0,
-            clicks: 0
+            views: stats?.views ?? 0,
+            clicks: stats?.clicks ?? 0,
+            callActions: stats?.callActions ?? 0,
+            mapActions: stats?.mapActions ?? 0,
+            websiteActions: stats?.websiteActions ?? 0,
+            restaurant: restaurant?.toDomain()
+        )
+    }
+}
+
+extension OwnerOfferListRestaurantDTO {
+    func toDomain() -> OfferRestaurantSummary {
+        OfferRestaurantSummary(
+            id: id,
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            distanceKm: distanceKm,
+            isOpenNow: isOpenNow,
+            opensAt: opensAt
         )
     }
 }

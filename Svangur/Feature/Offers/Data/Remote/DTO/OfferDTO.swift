@@ -198,6 +198,65 @@ struct OwnerOfferListImageDTO: Codable, Sendable {
     }
 }
 
+struct OwnerOfferListStatsDTO: Codable, Sendable {
+    let views: Int
+    let clicks: Int
+    let callActions: Int
+    let mapActions: Int
+    let websiteActions: Int
+
+    enum CodingKeys: String, CodingKey {
+        case views
+        case clicks
+        case callActions = "call_actions"
+        case mapActions = "map_actions"
+        case websiteActions = "website_actions"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        views = try container.decodeIfPresent(Int.self, forKey: .views) ?? 0
+        clicks = try container.decodeIfPresent(Int.self, forKey: .clicks) ?? 0
+        callActions = try container.decodeIfPresent(Int.self, forKey: .callActions) ?? 0
+        mapActions = try container.decodeIfPresent(Int.self, forKey: .mapActions) ?? 0
+        websiteActions = try container.decodeIfPresent(Int.self, forKey: .websiteActions) ?? 0
+    }
+}
+
+struct OwnerOfferListRestaurantDTO: Codable, Sendable {
+    let id: Int64
+    let name: String
+    let address: String?
+    let latitude: Double?
+    let longitude: Double?
+    let distanceKm: Double?
+    let isOpenNow: Bool?
+    let opensAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case address
+        case latitude
+        case longitude
+        case distanceKm = "distance_km"
+        case isOpenNow = "is_open_now"
+        case opensAt = "opens_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        address = try container.decodeIfPresent(String.self, forKey: .address)
+        latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        distanceKm = try container.decodeIfPresent(Double.self, forKey: .distanceKm)
+        isOpenNow = try container.decodeIfPresent(Bool.self, forKey: .isOpenNow)
+        opensAt = try container.decodeIfPresent(String.self, forKey: .opensAt)
+    }
+}
+
 struct OwnerOfferListItemDTO: Codable, Sendable {
     let offerId: Int64
     let title: String
@@ -208,6 +267,8 @@ struct OwnerOfferListItemDTO: Codable, Sendable {
     let validDays: [String]
     let validTimeStart: String?
     let validTimeEnd: String?
+    let stats: OwnerOfferListStatsDTO?
+    let restaurant: OwnerOfferListRestaurantDTO?
     let status: String?
 
     enum CodingKeys: String, CodingKey {
@@ -220,6 +281,8 @@ struct OwnerOfferListItemDTO: Codable, Sendable {
         case validDays = "valid_days"
         case validTimeStart = "valid_time_start"
         case validTimeEnd = "valid_time_end"
+        case stats
+        case restaurant
         case status
     }
 
@@ -234,23 +297,41 @@ struct OwnerOfferListItemDTO: Codable, Sendable {
         validDays = try container.decodeIfPresent([String].self, forKey: .validDays) ?? []
         validTimeStart = try container.decodeIfPresent(String.self, forKey: .validTimeStart)
         validTimeEnd = try container.decodeIfPresent(String.self, forKey: .validTimeEnd)
+        stats = try container.decodeIfPresent(OwnerOfferListStatsDTO.self, forKey: .stats)
+        restaurant = try container.decodeIfPresent(OwnerOfferListRestaurantDTO.self, forKey: .restaurant)
         status = try container.decodeIfPresent(String.self, forKey: .status)
     }
 }
 
 struct OfferListPayloadDTO: Codable, Sendable {
+    let page: Int
+    let limit: Int
+    let total: Int
+    let totalPages: Int
     let items: [OwnerOfferListItemDTO]
 
     enum CodingKeys: String, CodingKey {
+        case page
+        case limit
+        case total
+        case totalPages = "total_pages"
         case items
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 1
+        limit = try container.decodeIfPresent(Int.self, forKey: .limit) ?? 20
+        total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        totalPages = try container.decodeIfPresent(Int.self, forKey: .totalPages) ?? 1
         items = try container.decodeIfPresent([OwnerOfferListItemDTO].self, forKey: .items) ?? []
     }
 
-    init(items: [OwnerOfferListItemDTO] = []) {
+    init(page: Int = 1, limit: Int = 20, total: Int = 0, totalPages: Int = 1, items: [OwnerOfferListItemDTO] = []) {
+        self.page = page
+        self.limit = limit
+        self.total = total
+        self.totalPages = totalPages
         self.items = items
     }
 }

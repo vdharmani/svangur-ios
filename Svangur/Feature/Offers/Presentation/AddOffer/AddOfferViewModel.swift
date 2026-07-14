@@ -7,7 +7,7 @@ enum AddOfferField: Hashable, CaseIterable {
 @MainActor
 @Observable
 final class AddOfferViewModel {
-    private(set) var loadState: AddOfferLoadState = .ready
+    private(set) var loadState: AddOfferLoadState
     private(set) var effect: AddOfferUiEffect?
     private(set) var validation = OfferDraftValidationErrors()
     private(set) var showPreview = false
@@ -28,6 +28,13 @@ final class AddOfferViewModel {
     /// discount picker always has something selectable.
     private(set) var discountOptions: [DiscountOwnerOption] = []
 
+    /// Real, dynamic valid-day options (`GET /days` via `GetDaysUseCaseProtocol`). Falls back to
+    /// `Self.fallbackDays` if the fetch fails or returns empty, so the Valid Days chips always
+    /// have something selectable. `DayItem.key` (`"mon"`..`"sun"`) round-trips through
+    /// `Weekday(dayCode:)` to stay compatible with `OfferDraft.validDays: Set<Weekday>`, the wire
+    /// format the offer create/update multipart body depends on.
+    private(set) var days: [DayItem] = []
+
     var draft: OfferDraft = .empty {
         didSet { revalidate() }
     }
@@ -39,6 +46,7 @@ final class AddOfferViewModel {
     private let updateOfferUseCase: UpdateOfferUseCaseProtocol
     private let validateDraftUseCase: ValidateOfferDraftUseCaseProtocol
     private let dealRepository: DealRepositoryProtocol
+    private let getDaysUseCase: GetDaysUseCaseProtocol
 
     init(
         mode: AddOfferMode,
@@ -46,14 +54,20 @@ final class AddOfferViewModel {
         createOfferUseCase: CreateOfferUseCaseProtocol,
         updateOfferUseCase: UpdateOfferUseCaseProtocol,
         validateDraftUseCase: ValidateOfferDraftUseCaseProtocol,
-        dealRepository: DealRepositoryProtocol
+        dealRepository: DealRepositoryProtocol,
+        getDaysUseCase: GetDaysUseCaseProtocol
     ) {
         self.mode = mode
+        // Edit mode starts in `.loadingExisting` so the form is never shown with blank fields
+        // for the frame before `onAppear` fetches the real offer — `.ready` is only correct as
+        // the initial state for a brand-new (empty-by-design) offer.
+        self.loadState = mode.isEdit ? .loadingExisting : .ready
         self.getOfferUseCase = getOfferUseCase
         self.createOfferUseCase = createOfferUseCase
         self.updateOfferUseCase = updateOfferUseCase
         self.validateDraftUseCase = validateDraftUseCase
         self.dealRepository = dealRepository
+        self.getDaysUseCase = getDaysUseCase
     }
 
     var isValid: Bool { validation.isValid }
@@ -88,19 +102,27 @@ final class AddOfferViewModel {
         draft.existingImageUrls + draft.imageUris
     }
 
+    /// The category/discount-option/day metadata fetches are independent of the offer fetch, so
+    /// they run concurrently rather than one-after-another — in edit mode, that's the difference
+    /// between waiting on the sum of four network calls and waiting on the slowest single one.
     func onAppear(lang: String) async {
-        await loadCategories(lang: lang)
-        await loadDiscountOptions()
+        async let categoriesTask: Void = loadCategories(lang: lang)
+        async let discountOptionsTask: Void = loadDiscountOptions()
+        async let daysTask: Void = loadDays(lang: lang)
 
-        guard case .edit(let id) = mode else { return }
-        loadState = .loadingExisting
-        do throws(AppError) {
-            let offer = try await getOfferUseCase.execute(id: id)
-            draft = OfferDraft(from: offer)
-            loadState = .ready
-        } catch {
-            loadState = .error(error.displayMessage)
+        if case .edit(let id) = mode {
+            do throws(AppError) {
+                let offer = try await getOfferUseCase.execute(id: id)
+                draft = OfferDraft(from: offer)
+                loadState = .ready
+            } catch {
+                loadState = .error(error.displayMessage)
+            }
         }
+
+        _ = await categoriesTask
+        _ = await discountOptionsTask
+        _ = await daysTask
     }
 
     func onTapPreview() {
@@ -166,6 +188,16 @@ final class AddOfferViewModel {
         }
     }
 
+    func toggleValidDay(_ dayItem: DayItem) {
+        guard let day = Weekday(dayCode: dayItem.key) else { return }
+        toggleValidDay(day)
+    }
+
+    func isDaySelected(_ dayItem: DayItem) -> Bool {
+        guard let day = Weekday(dayCode: dayItem.key) else { return false }
+        return draft.validDays.contains(day)
+    }
+
     func setEveryDay() {
         markTouched(.validDays)
         draft.validDays = Set(Weekday.allCases)
@@ -193,6 +225,15 @@ final class AddOfferViewModel {
         }
     }
 
+    private func loadDays(lang: String) async {
+        do throws(AppError) {
+            let fetched = try await getDaysUseCase.execute(lang: lang, tz: TimeZone.current.identifier)
+            days = fetched.isEmpty ? Self.fallbackDays : fetched
+        } catch {
+            days = Self.fallbackDays
+        }
+    }
+
     /// JUDGMENT CALL: small hardcoded fallback so the category picker stays functional if
     /// `listOwnerCategories()` fails or the backend returns nothing — NOT meant to be a
     /// faithful mirror of any real category IDs.
@@ -214,6 +255,13 @@ final class AddOfferViewModel {
         DiscountOwnerOption(id: 6, value: "2_for_1", kind: "2_for_1", label: "2 for 1"),
         DiscountOwnerOption(id: 7, value: "custom", kind: "custom", label: "Custom Offer")
     ]
+
+    /// JUDGMENT CALL: small hardcoded fallback mirroring the real `/days` shape, so the Valid
+    /// Days chips stay functional if `getDaysUseCase.execute()` fails or the backend returns
+    /// nothing — NOT meant to be a faithful mirror of the real current-day flag.
+    private static let fallbackDays: [DayItem] = Weekday.allCases.map { day in
+        DayItem(key: day.dayCode, label: day.shortName, shortLabel: day.shortName, isToday: false)
+    }
 }
 
 // MARK: - Preview Factory
@@ -231,7 +279,8 @@ extension AddOfferViewModel {
             createOfferUseCase: FakeCreateOfferUseCase(),
             updateOfferUseCase: FakeUpdateOfferUseCase(),
             validateDraftUseCase: validate,
-            dealRepository: FakeDealRepository()
+            dealRepository: FakeDealRepository(),
+            getDaysUseCase: FakeGetDaysUseCase()
         )
         vm.draft = prefilledDraft
         return vm
@@ -264,4 +313,7 @@ private struct FakeDealRepository: DealRepositoryProtocol {
     }
     func trackView(id: String) async throws(AppError) {}
     func trackClick(id: String) async throws(AppError) {}
+}
+private struct FakeGetDaysUseCase: GetDaysUseCaseProtocol {
+    func execute(lang: String, tz: String) async throws(AppError) -> [DayItem] { [] }
 }

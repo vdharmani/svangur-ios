@@ -17,7 +17,7 @@ final class CreateOfferUseCase: CreateOfferUseCaseProtocol, Sendable {
     func execute(draft: OfferDraft) async throws(AppError) {
         let errors = validateDraft.execute(draft)
         guard errors.isValid else {
-            throw .validation(message: "form.error.invalid_draft")
+            throw .validation(message: "Please fix the errors in the form before saving.")
         }
         try await offerRepository.createOffer(draft)
     }

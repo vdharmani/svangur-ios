@@ -165,16 +165,8 @@ struct DashboardScreen: View {
         }
     }
 
-    private var profileViewsCount: String {
-        if case .loaded(let offers) = viewModel.state {
-            let count = offers.count * 240
-            if count >= 1000 {
-                return String(format: "%.1fk", Double(count) / 1000.0)
-            }
-            return "\(count)"
-        }
-        return "0"
-    }
+    // The API has no restaurant-level "profile views" stat — show 0 rather than a fake number.
+    private var profileViewsCount: String { "0" }
 
     private var activeOffersCount: String {
         if case .loaded(let offers) = viewModel.state {
@@ -269,6 +261,16 @@ struct DashboardScreen: View {
                 ForEach(offers) { offer in
                     offerCard(offer)
                         .padding(.horizontal, SvSpacing.screenPadding)
+                        .onAppear {
+                            if offer.id == offers.last?.id {
+                                viewModel.loadMore()
+                            }
+                        }
+                }
+                if viewModel.isLoadingMore {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SvSpacing.lg)
                 }
             }
             .padding(.bottom, SvSpacing.xxxl)

@@ -34,7 +34,7 @@ final class RegisterRestaurantUseCase: RegisterRestaurantUseCaseProtocol, Sendab
             )
         )
         guard result.isValid else {
-            throw .validation(message: "auth.error.invalid_registration")
+            throw .validation(message: "Please fix the errors in the form before continuing.")
         }
         try await authRepository.registerRestaurant(registration)
     }

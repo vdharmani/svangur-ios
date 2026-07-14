@@ -20,7 +20,7 @@ final class UpdateOfferUseCase: UpdateOfferUseCaseProtocol, Sendable {
         }
         let errors = validateDraft.execute(draft)
         guard errors.isValid else {
-            throw .validation(message: "form.error.invalid_draft")
+            throw .validation(message: "Please fix the errors in the form before saving.")
         }
         try await offerRepository.updateOffer(id: id, draft: draft)
     }

@@ -44,7 +44,7 @@ actor LocationService: LocationServiceProtocol {
     func currentLocation() async throws(AppError) -> CLLocationCoordinate2D {
         let status = await requestWhenInUseAuthorization()
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
-            throw .unknown(message: "location_permission_denied")
+            throw .unknown(message: "Location permission was denied.")
         }
         do {
             let location: CLLocation = try await withCheckedThrowingContinuation { continuation in
@@ -63,7 +63,7 @@ actor LocationService: LocationServiceProtocol {
             // `CLGeocoder`'s completion-handler API is bridged to `async throws` automatically.
             let placemarks = try await CLGeocoder().reverseGeocodeLocation(location)
             guard let placemark = placemarks.first else {
-                throw AppError.unknown(message: "no_placemark_found")
+                throw AppError.unknown(message: "Couldn't find an address for this location.")
             }
             let streetParts = [placemark.subThoroughfare, placemark.thoroughfare].compactMap { $0 }
             return PlacemarkInfo(

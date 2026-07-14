@@ -16,11 +16,11 @@ final class ResetPasswordUseCase: ResetPasswordUseCaseProtocol, Sendable {
 
     func execute(token: String, newPassword: String, confirm: String) async throws(AppError) {
         guard !token.isEmpty else {
-            throw .validation(message: "auth.error.invalid_reset_token")
+            throw .validation(message: "This reset link is invalid or has expired.")
         }
         let result = validate.validateNewPassword(newPassword, confirm: confirm)
         guard result.isValid else {
-            throw .validation(message: "auth.error.invalid_new_password")
+            throw .validation(message: "Please choose a valid password.")
         }
         try await authRepository.resetPassword(
             PasswordResetToken(token: token, newPassword: newPassword)

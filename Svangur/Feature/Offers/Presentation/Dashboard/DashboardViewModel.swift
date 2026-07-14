@@ -5,7 +5,12 @@ import SwiftUI
 final class DashboardViewModel {
     private(set) var state: DashboardUiState = .idle
     private(set) var profile: RestaurantProfileUi?
+    private(set) var isLoadingMore = false
+    private(set) var hasNextPage = false
     var offerIdToDelete: Int64?
+
+    private var currentPage = 1
+    private let pageSize = 20
 
     private let getMyOffersUseCase: GetMyOffersUseCaseProtocol
     private let deleteOfferUseCase: DeleteOfferUseCaseProtocol
@@ -22,18 +27,29 @@ final class DashboardViewModel {
     }
 
     /// The restaurant profile (name/image) can change server-side — e.g. after Edit Restaurant
-    /// — so it's always refreshed on appear. The offers list, by contrast, only reloads once
-    /// per appearance of this screen (guarded below) so returning from an unrelated screen
-    /// (offer detail, etc.) doesn't re-flicker the whole list through its loading skeleton.
+    /// — so it's always refreshed on appear. The offers list is loaded through the skeleton only
+    /// the first time; every later appearance (e.g. returning from Add/Edit Offer, which may
+    /// reuse this same ViewModel instance via NavigationStack) re-fetches quietly in the
+    /// background so new/edited offers show up without re-flickering the whole list.
     func onAppear() async {
         await refreshProfile()
-        guard case .idle = state else { return }
-        await loadOffers()
+        switch state {
+        case .idle:
+            await loadInitial()
+        default:
+            await reloadQuietly()
+        }
     }
 
     func refresh() async {
-        await loadOffers()
+        await loadInitial()
         await refreshProfile()
+    }
+
+    /// Called when the last visible offer row appears — standard infinite-scroll trigger.
+    func loadMore() {
+        guard !isLoadingMore, hasNextPage else { return }
+        Task { await loadNextPage() }
     }
 
     func requestDelete(id: Int64) {
@@ -49,23 +65,54 @@ final class DashboardViewModel {
         offerIdToDelete = nil
         do throws(AppError) {
             try await deleteOfferUseCase.execute(id: id)
-            await loadOffers()
+            await loadInitial()
         } catch {
             state = .error(error.displayMessage)
         }
     }
 
-    private func loadOffers() async {
+    private func loadInitial() async {
         state = .loading
+        currentPage = 1
         do throws(AppError) {
-            let offers = try await getMyOffersUseCase.execute()
-            if offers.isEmpty {
+            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize)
+            hasNextPage = result.hasNextPage
+            currentPage = result.nextPage ?? 1
+            if result.items.isEmpty {
                 state = .empty
             } else {
-                state = .loaded(offers.map { $0.toUi() })
+                state = .loaded(result.items.map { $0.toUi() })
             }
         } catch {
             state = .error(error.displayMessage)
+        }
+    }
+
+    private func reloadQuietly() async {
+        currentPage = 1
+        do throws(AppError) {
+            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize)
+            hasNextPage = result.hasNextPage
+            currentPage = result.nextPage ?? 1
+            state = result.items.isEmpty ? .empty : .loaded(result.items.map { $0.toUi() })
+        } catch {
+            // Silent background refresh — keep whatever was already on screen rather than
+            // clobbering good data with an error banner.
+        }
+    }
+
+    private func loadNextPage() async {
+        guard case .loaded(let existing) = state else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do throws(AppError) {
+            let result = try await getMyOffersUseCase.execute(page: currentPage, limit: pageSize)
+            hasNextPage = result.hasNextPage
+            currentPage = result.nextPage ?? currentPage
+            state = .loaded(existing + result.items.map { $0.toUi() })
+        } catch {
+            // Keep the existing page visible; `hasNextPage` stays true so scrolling back to the
+            // last row retries — no separate append-error surface exists on this screen yet.
         }
     }
 
@@ -97,7 +144,9 @@ extension DashboardViewModel {
 }
 
 private struct FakeGetMyOffersUseCase: GetMyOffersUseCaseProtocol {
-    func execute() async throws(AppError) -> [Offer] { MockOfferRepository.seed }
+    func execute(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
+        PaginatedResult(items: MockOfferRepository.seed, hasNextPage: false, nextPage: nil)
+    }
 }
 
 private struct FakeDeleteOfferUseCase: DeleteOfferUseCaseProtocol {

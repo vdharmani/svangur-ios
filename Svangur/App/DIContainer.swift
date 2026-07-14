@@ -239,7 +239,8 @@ final class DIContainer: Sendable {
             createOfferUseCase: makeCreateOfferUseCase(),
             updateOfferUseCase: makeUpdateOfferUseCase(),
             validateDraftUseCase: makeValidateOfferDraftUseCase(),
-            dealRepository: makeDealRepository()
+            dealRepository: makeDealRepository(),
+            getDaysUseCase: makeGetDaysUseCase()
         )
     }
 
@@ -272,6 +273,10 @@ final class DIContainer: Sendable {
 
     func makeDaysRepository() -> DaysRepositoryProtocol {
         DaysRepositoryImpl(apiClient: apiClient)
+    }
+
+    func makeGetDaysUseCase() -> GetDaysUseCaseProtocol {
+        GetDaysUseCase(daysRepository: makeDaysRepository())
     }
 
     // MARK: - Feature: Legal

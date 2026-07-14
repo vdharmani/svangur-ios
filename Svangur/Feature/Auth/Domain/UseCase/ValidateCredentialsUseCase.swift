@@ -113,7 +113,9 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
     func validateRegistration(_ input: RegistrationValidationInput) -> RegistrationValidation {
         let imagesError: ValidationError? = {
             if input.imageCount == 0 { return .custom(messageKey: "Please add at least one image.") }
-            if input.imageCount > Self.maxImageCount { return .custom(messageKey: "auth.error.images_max") }
+            if input.imageCount > Self.maxImageCount {
+                return .custom(messageKey: "You can upload up to \(Self.maxImageCount) images.")
+            }
             return nil
         }()
 

@@ -17,7 +17,7 @@ final class LoginUseCase: LoginUseCaseProtocol, Sendable {
     func execute(credentials: Credentials) async throws(AppError) -> AuthToken {
         let result = validate.validateLogin(email: credentials.email, password: credentials.password)
         guard result.isValid else {
-            throw .validation(message: "auth.error.invalid_credentials_format")
+            throw .validation(message: "Please check your email and password.")
         }
         return try await authRepository.login(credentials: credentials)
     }
