@@ -15,3 +15,9 @@ struct DealCategory: Sendable, Equatable {
         self.sortOrder = sortOrder
     }
 }
+
+extension DealCategory {
+    func localizedName(for language: AppLanguage) -> String {
+        language == .icelandic ? nameIs : nameEn
+    }
+}

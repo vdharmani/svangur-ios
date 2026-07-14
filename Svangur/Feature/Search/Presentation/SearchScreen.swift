@@ -337,15 +337,6 @@ struct SearchScreen: View {
     .environment(UserSession(authRepository: MockAuthRepository()))
 }
 
-#Preview("Search - Dark") {
-    NavigationStack {
-        SearchScreen(viewModel: .previewInstance())
-    }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Search - Wide (no break)") {
     NavigationStack {
         SearchScreen(viewModel: .previewInstance(

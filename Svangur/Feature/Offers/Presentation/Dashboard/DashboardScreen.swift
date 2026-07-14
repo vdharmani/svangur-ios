@@ -523,16 +523,6 @@ struct DashboardScreen: View {
     .environment(AppRouter())
 }
 
-#Preview("Dashboard - Dark") {
-    NavigationStack {
-        DashboardScreen(viewModel: .previewInstance(
-            state: .loaded(MockOfferRepository.seed.map { $0.toUi() })
-        ))
-    }
-    .environment(AppRouter())
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Dashboard - Wide (no break)") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(

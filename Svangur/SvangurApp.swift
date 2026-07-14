@@ -5,6 +5,7 @@ import GooglePlacesSwift
 struct SvangurApp: App {
     @State private var router = AppRouter()
     @State private var session: UserSession
+    @State private var languageService: LanguageService
     private let container: DIContainer
 
     init() {
@@ -12,6 +13,7 @@ struct SvangurApp: App {
         let container = DIContainer()
         self.container = container
         self._session = State(wrappedValue: container.makeUserSession())
+        self._languageService = State(wrappedValue: container.makeLanguageService())
     }
 
     var body: some Scene {
@@ -19,6 +21,8 @@ struct SvangurApp: App {
             RootView(container: container)
                 .environment(router)
                 .environment(session)
+                .environment(languageService)
+                .preferredColorScheme(.light)
                 .onOpenURL { url in
                     router.handle(url)
                 }
@@ -103,6 +107,8 @@ private struct RootView: View {
             EditRestaurantScreen(viewModel: container.makeEditRestaurantViewModel())
         case .onboarding:
             Text("Onboarding")
+        case .legal(let documentType):
+            LegalScreen(viewModel: container.makeLegalViewModel(documentType: documentType))
         case .dashboard:
             DashboardScreen(viewModel: container.makeDashboardViewModel())
         case .addOffer:

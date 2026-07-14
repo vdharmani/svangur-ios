@@ -850,11 +850,3 @@ private extension HourMinute {
     }
     .environment(AppRouter())
 }
-
-#Preview("Register - Dark") {
-    NavigationStack {
-        RegisterRestaurantScreen(viewModel: .previewInstance())
-    }
-    .environment(AppRouter())
-    .preferredColorScheme(.dark)
-}

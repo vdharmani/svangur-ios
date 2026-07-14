@@ -5,6 +5,7 @@ struct AddOfferScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
+    @Environment(LanguageService.self) private var languageService
     @State var viewModel: AddOfferViewModel
 
     @State private var showCategorySheet = false
@@ -51,7 +52,7 @@ struct AddOfferScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color.svBackground.ignoresSafeArea())
-        .task { await viewModel.onAppear() }
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
         .onChange(of: viewModel.effect) { _, effect in
             guard case .saved = effect else { return }
             viewModel.consumeEffect()
@@ -64,8 +65,10 @@ struct AddOfferScreen: View {
         .sheet(isPresented: $showCategorySheet) {
             CategoryPickerSheet(
                 categories: viewModel.categories,
+                language: languageService.current,
                 selectedId: viewModel.draft.categoryId.map(String.init),
                 onSelect: { categoryId in
+                    viewModel.markTouched(.category)
                     viewModel.draft.categoryId = Int64(categoryId)
                     showCategorySheet = false
                 }
@@ -73,9 +76,11 @@ struct AddOfferScreen: View {
         }
         .sheet(isPresented: $showDiscountSheet) {
             DiscountPickerSheet(
+                options: viewModel.discountOptions,
                 selectedId: viewModel.draft.discountId,
                 selectedCustomText: viewModel.draft.customDiscountText,
                 onSelect: { discountId, customText in
+                    viewModel.markTouched(.discount)
                     viewModel.draft.discountId = discountId
                     viewModel.draft.customDiscountText = customText
                     showDiscountSheet = false
@@ -214,12 +219,13 @@ struct AddOfferScreen: View {
                 .onSubmit { focusedField = .description }
                 .textInputAutocapitalization(.sentences)
                 .onChange(of: viewModel.draft.title) { _, new in
+                    viewModel.markTouched(.title)
                     if new.count > ValidateOfferDraftUseCase.titleMaxLength {
                         viewModel.draft.title = String(new.prefix(ValidateOfferDraftUseCase.titleMaxLength))
                     }
                 }
             HStack {
-                FieldErrorText(error: viewModel.validation.title)
+                FieldErrorText(error: viewModel.displayError(for: .title))
                 Spacer()
             }
         }
@@ -238,12 +244,13 @@ struct AddOfferScreen: View {
             .focused($focusedField, equals: .description)
             .textInputAutocapitalization(.sentences)
             .onChange(of: viewModel.draft.description) { _, new in
+                viewModel.markTouched(.description)
                 if new.count > ValidateOfferDraftUseCase.descriptionMaxLength {
                     viewModel.draft.description = String(new.prefix(ValidateOfferDraftUseCase.descriptionMaxLength))
                 }
             }
             HStack {
-                FieldErrorText(error: viewModel.validation.description)
+                FieldErrorText(error: viewModel.displayError(for: .description))
                 Spacer()
             }
         }
@@ -258,7 +265,7 @@ struct AddOfferScreen: View {
                 value: categoryDisplayName(for: viewModel.draft.categoryId),
                 onTap: { showCategorySheet = true }
             )
-            FieldErrorText(error: viewModel.validation.category)
+            FieldErrorText(error: viewModel.displayError(for: .category))
         }
         .padding(.top, -12)
     }
@@ -271,7 +278,7 @@ struct AddOfferScreen: View {
                 value: discountDisplayValue,
                 onTap: { showDiscountSheet = true }
             )
-            FieldErrorText(error: viewModel.validation.discount)
+            FieldErrorText(error: viewModel.displayError(for: .discount))
         }
     }
 
@@ -287,7 +294,7 @@ struct AddOfferScreen: View {
                     )
                 }
             }
-            FieldErrorText(error: viewModel.validation.validDays)
+            FieldErrorText(error: viewModel.displayError(for: .validDays))
         }
     }
 
@@ -297,17 +304,23 @@ struct AddOfferScreen: View {
             HStack(spacing: SvSpacing.md) {
                 TimePickerField(time: Binding(
                     get: { viewModel.draft.validTimeStart },
-                    set: { viewModel.draft.validTimeStart = $0 }
+                    set: {
+                        viewModel.markTouched(.validTime)
+                        viewModel.draft.validTimeStart = $0
+                    }
                 ))
                 Text("–")
                     .font(SvFont.title)
                     .foregroundStyle(Color.svOnBackground)
                 TimePickerField(time: Binding(
                     get: { viewModel.draft.validTimeEnd },
-                    set: { viewModel.draft.validTimeEnd = $0 }
+                    set: {
+                        viewModel.markTouched(.validTime)
+                        viewModel.draft.validTimeEnd = $0
+                    }
                 ))
             }
-            FieldErrorText(error: viewModel.validation.validTime)
+            FieldErrorText(error: viewModel.displayError(for: .validTime))
         }
     }
 
@@ -334,20 +347,25 @@ struct AddOfferScreen: View {
 
     private func categoryDisplayName(for categoryId: Int64?) -> String? {
         guard let categoryId else { return nil }
-        return viewModel.categories.first(where: { $0.id == String(categoryId) })?.nameEn
-            ?? "Category #\(categoryId)"
+        guard let category = viewModel.categories.first(where: { $0.id == String(categoryId) }) else {
+            return "Category #\(categoryId)"
+        }
+        return category.localizedName(for: languageService.current)
     }
 
-    /// JUDGMENT CALL: mirrors `Offer.discountDisplayText` (`OfferUiMapper.swift`) for the
-    /// in-form dropdown label — approximate percentage-style formatting is acceptable here,
-    /// this is display-only.
+    /// Looks up the human-readable label from the real, dynamic discount options
+    /// (`viewModel.discountOptions`, backed by `GET /discount-options`). A raw-value fallback
+    /// covers the brief window before `onAppear`'s fetch resolves.
     private var discountDisplayValue: String? {
         guard let discountId = viewModel.draft.discountId, !discountId.isEmpty else { return nil }
         if discountId == "custom" {
             let text = viewModel.draft.customDiscountText ?? ""
             return text.isEmpty ? "Custom" : text
         }
-        if discountId == "bogo" { return "Buy 1 Get 1" }
+        if let match = viewModel.discountOptions.first(where: { $0.value == discountId }) {
+            return match.label
+        }
+        if discountId == "bogo" { return "2 for 1" } // legacy sentinel from offline/mock data
         return "\(discountId)% off"
     }
 
@@ -556,12 +574,19 @@ private struct FieldErrorText: View {
 /// `Picker(selection:)` requires a `Hashable` binding value.
 private struct CategoryPickerSheet: View {
     let categories: [DealCategory]
+    let language: AppLanguage
     let onSelect: (String) -> Void
 
     @State private var tempSelectedId: String
 
-    init(categories: [DealCategory], selectedId: String?, onSelect: @escaping (String) -> Void) {
+    init(
+        categories: [DealCategory],
+        language: AppLanguage,
+        selectedId: String?,
+        onSelect: @escaping (String) -> Void
+    ) {
         self.categories = categories
+        self.language = language
         self.onSelect = onSelect
         _tempSelectedId = State(initialValue: selectedId ?? categories.first?.id ?? "")
     }
@@ -588,7 +613,7 @@ private struct CategoryPickerSheet: View {
             } else {
                 Picker("Category", selection: $tempSelectedId) {
                     ForEach(categories, id: \.id) { category in
-                        Text(category.nameEn).tag(category.id)
+                        Text(category.localizedName(for: language)).tag(category.id)
                     }
                 }
                 .pickerStyle(.wheel)
@@ -603,36 +628,27 @@ private struct CategoryPickerSheet: View {
 
 // MARK: - Discount sheet
 
-/// JUDGMENT CALL (reshape to real backend API): the old `OfferDiscount` enum (percentage /
-/// fixed-amount / BOGO / free-item) doesn't exist on the wire anymore — the backend just takes a
-/// raw `discount_value` string plus an optional `custom_discount_text`. This picker keeps the
-/// same *visual* set of options the old picker exposed (percentage steps, a "buy one get one"
-/// option) plus a "Custom" option that reveals a free-text field, mapping each choice onto the
-/// simplest wire-faithful `discountId` string: a bare percentage number, `"bogo"`, or `"custom"`.
-/// The old picker's separate "fixed ISK amount" range is dropped — there's no separate wire
-/// concept for it once discount_value is a single opaque string, and keeping it would mean
-/// showing a numeric value indistinguishable from a percentage on the wire. This is flagged as a
-/// follow-up if the real design calls for a fixed-amount discount type.
+/// Backed by the real, dynamic `DiscountOwnerOption` list (`DealRepositoryProtocol
+/// .listOwnerDiscountOptions()`, `GET /discount-options`) injected into `AddOfferViewModel` —
+/// NOT a hardcoded percentage stride. `option.value` is the wire-faithful `discount_value` sent
+/// to the backend verbatim (e.g. `"10"`, `"2_for_1"`, `"custom"`); selecting `"custom"` reveals
+/// a free-text field for `custom_discount_text`.
 private struct DiscountPickerSheet: View {
-    private struct DiscountOption: Identifiable, Hashable {
-        let id: String
-        let label: String
-    }
-
-    private static let options: [DiscountOption] =
-        stride(from: 5, through: 90, by: 5).map { DiscountOption(id: "\($0)", label: "\($0)% off") }
-        + [DiscountOption(id: "bogo", label: "Buy 1 Get 1")]
-        + [DiscountOption(id: "custom", label: "Custom")]
-
+    let options: [DiscountOwnerOption]
     let onSelect: (String, String?) -> Void
 
-    @State private var selectedOption: DiscountOption
+    @State private var selectedValue: String
     @State private var customText: String
 
-    init(selectedId: String?, selectedCustomText: String?, onSelect: @escaping (String, String?) -> Void) {
+    init(
+        options: [DiscountOwnerOption],
+        selectedId: String?,
+        selectedCustomText: String?,
+        onSelect: @escaping (String, String?) -> Void
+    ) {
+        self.options = options
         self.onSelect = onSelect
-        let initial = Self.options.first { $0.id == selectedId } ?? Self.options[0]
-        _selectedOption = State(initialValue: initial)
+        _selectedValue = State(initialValue: options.first { $0.value == selectedId }?.value ?? options.first?.value ?? "")
         _customText = State(initialValue: selectedCustomText ?? "")
     }
 
@@ -641,7 +657,7 @@ private struct DiscountPickerSheet: View {
             HStack {
                 Spacer()
                 Button("Done") {
-                    onSelect(selectedOption.id, selectedOption.id == "custom" ? customText : nil)
+                    onSelect(selectedValue, selectedValue == "custom" ? customText : nil)
                 }
                 .foregroundStyle(.pink)
                 .fontWeight(.medium)
@@ -650,22 +666,29 @@ private struct DiscountPickerSheet: View {
                 .padding(.bottom, 8)
             }
 
-            Picker("Discount", selection: $selectedOption) {
-                ForEach(Self.options) { option in
-                    Text(option.label).tag(option)
+            if options.isEmpty {
+                Spacer()
+                Text("No discount options available")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                Picker("Discount", selection: $selectedValue) {
+                    ForEach(options, id: \.value) { option in
+                        Text(option.label).tag(option.value)
+                    }
                 }
-            }
-            .pickerStyle(.wheel)
-            .padding(.horizontal)
+                .pickerStyle(.wheel)
+                .padding(.horizontal)
 
-            if selectedOption.id == "custom" {
-                TextField("Custom discount text", text: $customText)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal)
-                    .padding(.top, SvSpacing.sm)
-            }
+                if selectedValue == "custom" {
+                    TextField("Custom discount text", text: $customText)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                        .padding(.top, SvSpacing.sm)
+                }
 
-            Spacer()
+                Spacer()
+            }
         }
         .presentationDetents([.fraction(0.5)])
         .presentationDragIndicator(.hidden)
@@ -679,6 +702,7 @@ private struct DiscountPickerSheet: View {
         AddOfferScreen(viewModel: .previewInstance(mode: .create))
     }
     .environment(AppRouter())
+    .environment(LanguageService())
 }
 
 #Preview("Add - Filled") {
@@ -689,6 +713,7 @@ private struct DiscountPickerSheet: View {
         ))
     }
     .environment(AppRouter())
+    .environment(LanguageService())
 }
 
 #Preview("Edit") {
@@ -699,6 +724,7 @@ private struct DiscountPickerSheet: View {
         ))
     }
     .environment(AppRouter())
+    .environment(LanguageService())
 }
 
 #Preview("Add - Wide (no break)") {
@@ -710,4 +736,5 @@ private struct DiscountPickerSheet: View {
         .frame(width: 1024, height: 1366)
     }
     .environment(AppRouter())
+    .environment(LanguageService())
 }

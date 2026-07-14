@@ -12,6 +12,7 @@ enum AppRoute: Hashable, Sendable {
     case changePassword
     case editRestaurant
     case onboarding
+    case legal(documentType: LegalDocumentType)
 
     // MARK: - Offers (owner)
     case dashboard

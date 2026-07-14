@@ -26,14 +26,13 @@ struct LoginScreen: View {
                 .shadow(color: .black.opacity(0.078), radius: 11, x: 0, y: -6)
                 .ignoresSafeArea(edges: .top)
 
-            // Page content — ignore top safe area so positions are measured
-            // from the screen top, matching Figma's absolute y-values.
+            // Page content — respects the top safe area, same as ForgotPasswordScreen,
+            // so the back button lands in the same screen position on both screens.
             VStack(spacing: 25) {
                 header
                 form
                 Spacer(minLength: 0)
             }
-            .ignoresSafeArea(.container, edges: .top)
         }
         .navigationBarBackButtonHidden(true)
         .toolbarVisibility(.hidden, for: .navigationBar)
@@ -49,33 +48,35 @@ struct LoginScreen: View {
     // MARK: - Header (back button + logo over the curved pink area)
     
     private var header: some View {
-        ZStack(alignment: .topLeading) {
-            // Back button — Figma y=57 from screen top
+        // Logo — vertically centered in the pink area, same position as before.
+        VStack(spacing: 0) {
+            Spacer().frame(height: 20)
+            Image(.svangurWordmark)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(.white)
+                .frame(width: 211, height: 58)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 270)
+        .overlay(alignment: .topLeading) {
+            // Back button — pinned independently to the top, same position as
+            // ForgotPasswordScreen's back button (screenPadding leading, 8pt top,
+            // both measured from the safe area) — not affected by the logo's centering.
             Button {
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.black)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 44, height: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Back")
-            .padding(.leading, SvSpacing.sm)
-            .padding(.top, 0)
-            // Logo — horizontally centered, Figma y=108 from screen top
-            VStack(spacing: 0) {
-                Spacer().frame(height: 20)
-                Image(.svangurWordmark)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.white)
-                    .frame(width: 211, height: 58)
-            }
-            .frame(maxWidth: .infinity)
+            .padding(.leading, SvSpacing.screenPadding)
+            .padding(.top, 8)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 270)
     }
     // MARK: - Form
 
@@ -184,43 +185,51 @@ struct LoginScreen: View {
         keyboard: UIKeyboardType,
         errorKey: LocalizedStringKey?
     ) -> some View {
-        HStack(spacing: 8) {
-            Group {
-                let styledPrompt = Text(placeholder)
-                    .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
-                if isSecure && !revealPassword {
-                    SecureField("", text: text, prompt: styledPrompt)
-                } else {
-                    TextField("", text: text, prompt: styledPrompt)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Group {
+                    let styledPrompt = Text(placeholder)
+                        .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                    if isSecure && !revealPassword {
+                        SecureField("", text: text, prompt: styledPrompt)
+                    } else {
+                        TextField("", text: text, prompt: styledPrompt)
+                    }
+                }
+                .font(.custom("Poppins-Regular", size: 15, relativeTo: .subheadline))
+                .foregroundStyle(Color(red: 0.067, green: 0.067, blue: 0.067))
+                .keyboardType(keyboard)
+                .textContentType(contentType)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+
+                if isSecure {
+                    Button {
+                        revealPassword.toggle()
+                    } label: {
+                        Image(systemName: revealPassword ? "eye" : "eye.slash")
+                            .foregroundStyle(Color(red: 0.514, green: 0.514, blue: 0.514))
+                    }
+                    .accessibilityLabel(revealPassword ? "Hide password" : "Show password")
                 }
             }
-            .font(.custom("Poppins-Regular", size: 15, relativeTo: .subheadline))
-            .foregroundStyle(Color(red: 0.067, green: 0.067, blue: 0.067))
-            .keyboardType(keyboard)
-            .textContentType(contentType)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
+            .padding(.horizontal, 18)
+            .frame(height: 55)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.svPrimary.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(errorKey == nil ? Color.svPrimary : Color.svError, lineWidth: 1)
+            )
 
-            if isSecure {
-                Button {
-                    revealPassword.toggle()
-                } label: {
-                    Image(systemName: revealPassword ? "eye" : "eye.slash")
-                        .foregroundStyle(Color(red: 0.514, green: 0.514, blue: 0.514))
-                }
-                .accessibilityLabel(revealPassword ? "Hide password" : "Show password")
+            if let errorKey {
+                Text(errorKey)
+                    .font(.caption)
+                    .foregroundStyle(Color.svError)
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 55)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.svPrimary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.svPrimary, lineWidth: 1)
-        )
     }
 
     private func errorKey(for error: ValidationError?) -> LocalizedStringKey? {

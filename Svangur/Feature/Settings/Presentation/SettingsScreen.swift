@@ -180,16 +180,18 @@ struct SettingsScreen: View {
                 icon: "Terms&Conditions",
                 title: "Terms & Conditions"
             ) {
+                router.navigate(to: .legal(documentType: .terms))
             }
-            
+
             Divider()
                 .background(Color.svDivider)
                 .padding(.leading, SvSpacing.lg + 22 + SvSpacing.md)
-            
+
             settingsRow(
                 icon: "PrivacyPolicy",
                 title: "Privacy Policy"
             ) {
+                router.navigate(to: .legal(documentType: .privacy))
             }
         }
     }
@@ -308,14 +310,5 @@ struct SettingsScreen: View {
         }
         .environment(AppRouter())
         .environment(UserSession(authRepository: MockAuthRepository()))
-    }
-    
-    #Preview("Settings - Dark") {
-        NavigationStack {
-            SettingsScreen(viewModel: .previewInstance())
-        }
-        .environment(AppRouter())
-        .environment(UserSession(authRepository: MockAuthRepository()))
-        .preferredColorScheme(.dark)
     }
 }

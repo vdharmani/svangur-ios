@@ -132,9 +132,3 @@ private extension Comparable {
     EntryScreen(onLogin: {}, onSignup: {})
         .frame(width: 820, height: 1180)
 }
-
-#Preview("Entry — Dark") {
-    EntryScreen(onLogin: {}, onSignup: {})
-        .frame(width: 393, height: 852)
-        .preferredColorScheme(.dark)
-}

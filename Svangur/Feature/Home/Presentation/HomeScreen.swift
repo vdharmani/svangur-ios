@@ -4,6 +4,7 @@ import MapKit
 struct HomeScreen: View {
     @Environment(AppRouter.self) private var router
     @Environment(UserSession.self) private var session
+    @Environment(LanguageService.self) private var languageService
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State var viewModel: HomeViewModel
 
@@ -80,13 +81,23 @@ struct HomeScreen: View {
                     
                     Spacer()
                     HStack(spacing: SvSpacing.md) {
-                        HStack(spacing: SvSpacing.xs) {
-                            Image("ic_Uk")
-                                .frame(width: 19, height: 12)
-                            Text("EN")
-                                .font(SvFont.captionStrong)
-                                .foregroundStyle(Color.svOnPrimary)
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                languageService.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: SvSpacing.xs) {
+                                SvLanguageFlagIcon(language: languageService.current)
+                                    .frame(width: 19, height: 12)
+                                Text(languageService.current.displayLabel)
+                                    .font(SvFont.captionStrong)
+                                    .foregroundStyle(Color.svOnPrimary)
+                            }
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Switch language")
+                        .accessibilityValue(languageService.current == .english ? "English" : "Icelandic")
+
                         Button {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                 viewModel.toggleViewMode()
@@ -827,6 +838,7 @@ struct HomeScreen: View {
     }
     .environment(AppRouter())
     .environment(UserSession(authRepository: MockAuthRepository()))
+    .environment(LanguageService())
 }
 
 #Preview("Home - Loading") {
@@ -835,6 +847,7 @@ struct HomeScreen: View {
     }
     .environment(AppRouter())
     .environment(UserSession(authRepository: MockAuthRepository()))
+    .environment(LanguageService())
 }
 
 #Preview("Home - Loaded") {
@@ -854,6 +867,7 @@ struct HomeScreen: View {
     }
     .environment(AppRouter())
     .environment(UserSession(authRepository: MockAuthRepository()))
+    .environment(LanguageService())
 }
 
 #Preview("Home - Map") {
@@ -867,15 +881,7 @@ struct HomeScreen: View {
     }
     .environment(AppRouter())
     .environment(UserSession(authRepository: MockAuthRepository()))
-}
-
-#Preview("Home - Dark") {
-    NavigationStack {
-        HomeScreen(viewModel: .previewInstance(state: .empty))
-    }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .preferredColorScheme(.dark)
+    .environment(LanguageService())
 }
 
 #Preview("Home - Wide (no break)") {
@@ -884,5 +890,6 @@ struct HomeScreen: View {
     }
     .environment(AppRouter())
     .environment(UserSession(authRepository: MockAuthRepository()))
+    .environment(LanguageService())
     .frame(width: 1024, height: 1366)
 }

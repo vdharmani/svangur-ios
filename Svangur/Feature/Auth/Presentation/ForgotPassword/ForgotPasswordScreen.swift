@@ -32,6 +32,7 @@ struct ForgotPasswordScreen: View {
             }
         }
         .navigationBarBackButtonHidden(true)
+        .toolbarVisibility(.hidden, for: .navigationBar)
         .sensoryFeedback(.success, trigger: viewModel.state == .sent)
         .task { emailFocused = true }
     }

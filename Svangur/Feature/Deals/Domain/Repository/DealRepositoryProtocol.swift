@@ -9,8 +9,8 @@ protocol DealRepositoryProtocol: Sendable {
         day: String?
     ) async throws(AppError) -> [DealListing]
 
-    func listCategories() async throws(AppError) -> [DealCategory]
-    func listOwnerCategories() async throws(AppError) -> [DealCategory]
+    func listCategories(lang: String) async throws(AppError) -> [DealCategory]
+    func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory]
     func listDiscountFilters() async throws(AppError) -> [DiscountUserFilter]
     func listOwnerDiscountOptions() async throws(AppError) -> [DiscountOwnerOption]
     func getDeal(id: String) async throws(AppError) -> DealListing

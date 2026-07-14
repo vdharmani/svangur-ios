@@ -37,18 +37,22 @@ final class DealRepositoryImpl: DealRepositoryProtocol, Sendable {
         }
     }
 
-    func listCategories() async throws(AppError) -> [DealCategory] {
+    func listCategories(lang: String) async throws(AppError) -> [DealCategory] {
         try await apiCall {
-            let envelope: DealCategoriesEnvelopeDTO = try await apiClient.execute(DealEndpoint.listCategories)
+            let envelope: DealCategoriesEnvelopeDTO = try await apiClient.execute(
+                DealEndpoint.listCategories(lang: lang)
+            )
             return envelope.data.userFilters
                 .filter { $0.id != dealAllFilterID }
                 .map { $0.toDomain() }
         }
     }
 
-    func listOwnerCategories() async throws(AppError) -> [DealCategory] {
+    func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] {
         try await apiCall {
-            let envelope: DealCategoriesEnvelopeDTO = try await apiClient.execute(DealEndpoint.listCategories)
+            let envelope: DealCategoriesEnvelopeDTO = try await apiClient.execute(
+                DealEndpoint.listCategories(lang: lang)
+            )
             return envelope.data.ownerOptions.map { $0.toDomain() }
         }
     }

@@ -85,6 +85,11 @@ final class DIContainer: Sendable {
     }
 
     @MainActor
+    func makeLanguageService() -> LanguageService {
+        LanguageService()
+    }
+
+    @MainActor
     func makeLoginViewModel() -> LoginViewModel {
         LoginViewModel(
             loginUseCase: makeLoginUseCase(),
@@ -273,6 +278,15 @@ final class DIContainer: Sendable {
 
     func makeLegalRepository() -> LegalRepositoryProtocol {
         LegalRepositoryImpl(apiClient: apiClient)
+    }
+
+    func makeGetLegalDocumentUseCase() -> GetLegalDocumentUseCaseProtocol {
+        GetLegalDocumentUseCase(legalRepository: makeLegalRepository())
+    }
+
+    @MainActor
+    func makeLegalViewModel(documentType: LegalDocumentType) -> LegalViewModel {
+        LegalViewModel(documentType: documentType, getLegalDocumentUseCase: makeGetLegalDocumentUseCase())
     }
 
     // MARK: - Feature: Bootstrap

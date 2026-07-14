@@ -81,10 +81,33 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
     static let maxImageCount = 5
 
     func validateLogin(email: String, password: String) -> CredentialsValidation {
-        CredentialsValidation(
-            email: validateEmailFormat(email),
-            password: password.isEmpty ? .empty : nil
+        let emailError: ValidationError? = switch validateEmailFormat(email) {
+        case .empty:         .custom(messageKey: "Please enter email address")
+        case .invalidFormat: .custom(messageKey: "Please enter a valid email address")
+        case let other:      other
+        }
+
+        return CredentialsValidation(
+            email: emailError,
+            password: validateLoginPassword(password)
         )
+    }
+
+    private func validateLoginPassword(_ password: String) -> ValidationError? {
+        if password.isEmpty { return .custom(messageKey: "Please enter password") }
+
+        let hasUppercase = password.contains { $0.isUppercase }
+        let hasLowercase = password.contains { $0.isLowercase }
+        let hasSpecialCharacter = password.contains { $0.isSymbol || $0.isPunctuation }
+        let hasSpace = password.contains { $0.isWhitespace }
+
+        guard password.count >= Self.passwordMinLength,
+              hasUppercase, hasLowercase, hasSpecialCharacter, !hasSpace else {
+            return .custom(messageKey:
+                "Password must be at least 8 characters long with uppercase, lowercase, special character, and no spaces"
+            )
+        }
+        return nil
     }
 
     func validateRegistration(_ input: RegistrationValidationInput) -> RegistrationValidation {

@@ -1,5 +1,9 @@
 import SwiftUI
 
+enum AddOfferField: Hashable, CaseIterable {
+    case title, description, category, discount, validDays, validTime
+}
+
 @MainActor
 @Observable
 final class AddOfferViewModel {
@@ -8,10 +12,21 @@ final class AddOfferViewModel {
     private(set) var validation = OfferDraftValidationErrors()
     private(set) var showPreview = false
 
+    /// Fields the user has actually interacted with, plus whether a Save/Preview attempt has been
+    /// made. `displayError(for:)` uses this so selecting one field (e.g. discount) doesn't surface
+    /// validation errors for every other untouched field on the form.
+    private(set) var touchedFields: Set<AddOfferField> = []
+    private(set) var hasAttemptedSave = false
+
     /// Real, dynamic owner categories (`GET /categories` via `DealRepositoryProtocol`).
     /// Falls back to `Self.fallbackCategories` if the fetch fails or returns empty, so the
     /// category picker always has something selectable.
     private(set) var categories: [DealCategory] = []
+
+    /// Real, dynamic owner discount options (`GET /discount-options` via `DealRepositoryProtocol`).
+    /// Falls back to `Self.fallbackDiscountOptions` if the fetch fails or returns empty, so the
+    /// discount picker always has something selectable.
+    private(set) var discountOptions: [DiscountOwnerOption] = []
 
     var draft: OfferDraft = .empty {
         didSet { revalidate() }
@@ -42,6 +57,23 @@ final class AddOfferViewModel {
     }
 
     var isValid: Bool { validation.isValid }
+
+    func markTouched(_ field: AddOfferField) {
+        touchedFields.insert(field)
+    }
+
+    func displayError(for field: AddOfferField) -> ValidationError? {
+        guard hasAttemptedSave || touchedFields.contains(field) else { return nil }
+        switch field {
+        case .title:      return validation.title
+        case .description: return validation.description
+        case .category:   return validation.category
+        case .discount:   return validation.discount
+        case .validDays:  return validation.validDays
+        case .validTime:  return validation.validTime
+        }
+    }
+
     var titleCharCountText: String {
         "\(draft.title.count) / \(ValidateOfferDraftUseCase.titleMaxLength)"
     }
@@ -56,8 +88,9 @@ final class AddOfferViewModel {
         draft.existingImageUrls + draft.imageUris
     }
 
-    func onAppear() async {
-        await loadCategories()
+    func onAppear(lang: String) async {
+        await loadCategories(lang: lang)
+        await loadDiscountOptions()
 
         guard case .edit(let id) = mode else { return }
         loadState = .loadingExisting
@@ -71,6 +104,7 @@ final class AddOfferViewModel {
     }
 
     func onTapPreview() {
+        hasAttemptedSave = true
         revalidate()
         guard isValid else { return }
         showPreview = true
@@ -81,6 +115,7 @@ final class AddOfferViewModel {
     }
 
     func save() async {
+        hasAttemptedSave = true
         revalidate()
         guard isValid else { return }
         loadState = .saving
@@ -123,6 +158,7 @@ final class AddOfferViewModel {
     }
 
     func toggleValidDay(_ day: Weekday) {
+        markTouched(.validDays)
         if draft.validDays.contains(day) {
             draft.validDays.remove(day)
         } else {
@@ -131,6 +167,7 @@ final class AddOfferViewModel {
     }
 
     func setEveryDay() {
+        markTouched(.validDays)
         draft.validDays = Set(Weekday.allCases)
     }
 
@@ -138,12 +175,21 @@ final class AddOfferViewModel {
         validation = validateDraftUseCase.execute(draft)
     }
 
-    private func loadCategories() async {
+    private func loadCategories(lang: String) async {
         do throws(AppError) {
-            let fetched = try await dealRepository.listOwnerCategories()
+            let fetched = try await dealRepository.listOwnerCategories(lang: lang)
             categories = fetched.isEmpty ? Self.fallbackCategories : fetched
         } catch {
             categories = Self.fallbackCategories
+        }
+    }
+
+    private func loadDiscountOptions() async {
+        do throws(AppError) {
+            let fetched = try await dealRepository.listOwnerDiscountOptions()
+            discountOptions = fetched.isEmpty ? Self.fallbackDiscountOptions : fetched
+        } catch {
+            discountOptions = Self.fallbackDiscountOptions
         }
     }
 
@@ -154,6 +200,19 @@ final class AddOfferViewModel {
         DealCategory(id: "1", slug: "food", nameEn: "Food", nameIs: "Matur"),
         DealCategory(id: "2", slug: "drinks", nameEn: "Drinks", nameIs: "Drykkir"),
         DealCategory(id: "3", slug: "other", nameEn: "Other", nameIs: "Annað")
+    ]
+
+    /// JUDGMENT CALL: small hardcoded fallback mirroring the real `/discount-options` shape, so
+    /// the discount picker stays functional if `listOwnerDiscountOptions()` fails or the backend
+    /// returns nothing — NOT meant to be a faithful mirror of any real option IDs.
+    private static let fallbackDiscountOptions: [DiscountOwnerOption] = [
+        DiscountOwnerOption(id: 1, value: "10", kind: "percent", label: "10% off"),
+        DiscountOwnerOption(id: 2, value: "15", kind: "percent", label: "15% off"),
+        DiscountOwnerOption(id: 3, value: "20", kind: "percent", label: "20% off"),
+        DiscountOwnerOption(id: 4, value: "25", kind: "percent", label: "25% off"),
+        DiscountOwnerOption(id: 5, value: "30", kind: "percent", label: "30% off"),
+        DiscountOwnerOption(id: 6, value: "2_for_1", kind: "2_for_1", label: "2 for 1"),
+        DiscountOwnerOption(id: 7, value: "custom", kind: "custom", label: "Custom Offer")
     ]
 }
 
@@ -196,8 +255,8 @@ private struct FakeDealRepository: DealRepositoryProtocol {
         minDiscountPercent: Int?,
         day: String?
     ) async throws(AppError) -> [DealListing] { [] }
-    func listCategories() async throws(AppError) -> [DealCategory] { [] }
-    func listOwnerCategories() async throws(AppError) -> [DealCategory] { [] }
+    func listCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
+    func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
     func listDiscountFilters() async throws(AppError) -> [DiscountUserFilter] { [] }
     func listOwnerDiscountOptions() async throws(AppError) -> [DiscountOwnerOption] { [] }
     func getDeal(id: String) async throws(AppError) -> DealListing {
