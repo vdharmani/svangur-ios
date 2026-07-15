@@ -5,9 +5,9 @@ import IQKeyboardToolbarManager
 
 @main
 struct SvangurApp: App {
-    @State private var router = AppRouter()
-    @State private var session: UserSession
-    @State private var languageService: LanguageService
+    @StateObject private var router = AppRouter()
+    @StateObject private var session: UserSession
+    @StateObject private var languageService: LanguageService
     private let container: DIContainer
 
     init() {
@@ -22,16 +22,16 @@ struct SvangurApp: App {
 
         let container = DIContainer()
         self.container = container
-        self._session = State(wrappedValue: container.makeUserSession())
-        self._languageService = State(wrappedValue: container.makeLanguageService())
+        self._session = StateObject(wrappedValue: container.makeUserSession())
+        self._languageService = StateObject(wrappedValue: container.makeLanguageService())
     }
 
     var body: some Scene {
         WindowGroup {
             RootView(container: container)
-                .environment(router)
-                .environment(session)
-                .environment(languageService)
+                .environmentObject(router)
+                .environmentObject(session)
+                .environmentObject(languageService)
                 .preferredColorScheme(.light)
                 .onOpenURL { url in
                     router.handle(url)
@@ -43,13 +43,11 @@ struct SvangurApp: App {
 private struct RootView: View {
     let container: DIContainer
 
-    @Environment(AppRouter.self) private var router
-    @Environment(UserSession.self) private var session
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var session: UserSession
     @State private var splashFinished = false
 
     var body: some View {
-        @Bindable var router = router
-
         Group {
             if !splashFinished || !session.isInitialized {
                 SplashScreen {
@@ -67,10 +65,10 @@ private struct RootView: View {
             } else {
                 NavigationStack(path: $router.path) {
                     HomeScreen(viewModel: container.makeHomeViewModel())
-                        .toolbarVisibility(.hidden, for: .navigationBar)
+                        .toolbar(.hidden, for: .navigationBar)
                         .navigationDestination(for: AppRoute.self) { route in
                             destinationView(for: route)
-                                .toolbarVisibility(.hidden, for: .navigationBar)
+                                .toolbar(.hidden, for: .navigationBar)
                         }
                 }
             }

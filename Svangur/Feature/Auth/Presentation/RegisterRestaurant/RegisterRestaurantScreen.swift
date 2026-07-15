@@ -6,9 +6,9 @@ import UIKit
 struct RegisterRestaurantScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: RegisterRestaurantViewModel
-    
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: RegisterRestaurantViewModel
+
     @FocusState private var focusedField: Field?
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
@@ -27,7 +27,7 @@ struct RegisterRestaurantScreen: View {
     }
     
     init(viewModel: RegisterRestaurantViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
     
     var body: some View {
@@ -44,8 +44,8 @@ struct RegisterRestaurantScreen: View {
             form
         }
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
-        .sensoryFeedback(.success, trigger: viewModel.state == .submitted)
+        .toolbar(.hidden, for: .navigationBar)
+        .svSuccessFeedback(trigger: viewModel.state == .submitted)
         .fileImporter(
             isPresented: $showDocumentPicker,
             allowedContentTypes: [.jpeg, .pdf],
@@ -55,7 +55,7 @@ struct RegisterRestaurantScreen: View {
                 viewModel.setDocument(url)
             }
         }
-        .onChange(of: photoSelection) { _, items in
+        .onChange(of: photoSelection) { items in
             Task { await loadSelectedPhotos(items) }
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -170,7 +170,7 @@ struct RegisterRestaurantScreen: View {
                   contentType: .telephoneNumber,
                   field: .phone,
                   next: viewModel.isEnglishDescriptionSelected ? .description : .descriptionIcelandic)
-            .onChange(of: viewModel.phoneNumber) { _, newValue in
+            .onChange(of: viewModel.phoneNumber) { newValue in
                 let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
                 if clamped != newValue { viewModel.phoneNumber = clamped }
             }
@@ -376,7 +376,7 @@ struct RegisterRestaurantScreen: View {
                     .padding(.horizontal, 18)
                     .frame(height: SvSpacing.inputHeight)
                     .background(fieldBackground)
-                    .onChange(of: viewModel.restaurantName) { _, newValue in
+                    .onChange(of: viewModel.restaurantName) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
                         )
@@ -403,7 +403,7 @@ struct RegisterRestaurantScreen: View {
                     .padding(.horizontal, 18)
                     .frame(height: SvSpacing.inputHeight)
                     .background(fieldBackground)
-                    .onChange(of: viewModel.restaurantNameIcelandic) { _, newValue in
+                    .onChange(of: viewModel.restaurantNameIcelandic) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
                         )
@@ -881,7 +881,7 @@ private struct TimeChip: View {
             .datePickerStyle(.wheel)
             .labelsHidden()
             .padding()
-            .presentationCompactAdaptation(.popover)
+            .svPopoverCompactAdaptation()
         }
     }
 }
@@ -907,26 +907,26 @@ private extension HourMinute {
     NavigationStack {
         RegisterRestaurantScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Register - Submitting") {
     NavigationStack {
         RegisterRestaurantScreen(viewModel: .previewInstance(state: .submitting))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Register - Submitted") {
     NavigationStack {
         RegisterRestaurantScreen(viewModel: .previewInstance(state: .submitted))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Register - Error") {
     NavigationStack {
         RegisterRestaurantScreen(viewModel: .previewInstance(state: .error("Email already registered")))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

@@ -1,20 +1,20 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class SearchViewModel {
+final class SearchViewModel: ObservableObject {
 
-    var query: String = "" {
+    @Published var query: String = "" {
         didSet { scheduleSearch() }
     }
 
-    private(set) var state: SearchUiState = .idle
-    private(set) var recentSearches: [String] = []
+    @Published private(set) var state: SearchUiState = .idle
+    @Published private(set) var recentSearches: [String] = []
 
     private let getNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol
-    private var allOffers: [Offer] = []
-    private var searchTask: Task<Void, Never>?
-    private var hasLoadedOffers = false
+    @Published private var allOffers: [Offer] = []
+    @Published private var searchTask: Task<Void, Never>?
+    @Published private var hasLoadedOffers = false
 
     private static let recentSearchesKey = "recent_searches"
     private static let maxRecentSearches = 10

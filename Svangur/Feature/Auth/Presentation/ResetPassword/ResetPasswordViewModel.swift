@@ -1,13 +1,13 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class ResetPasswordViewModel {
-    var newPassword: String = "" { didSet { revalidateIfTouched() } }
-    var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
+final class ResetPasswordViewModel: ObservableObject {
+    @Published var newPassword: String = "" { didSet { revalidateIfTouched() } }
+    @Published var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
 
-    private(set) var state: ResetPasswordUiState = .idle
-    private(set) var validation = NewPasswordValidation()
+    @Published private(set) var state: ResetPasswordUiState = .idle
+    @Published private(set) var validation = NewPasswordValidation()
 
     let token: String
 

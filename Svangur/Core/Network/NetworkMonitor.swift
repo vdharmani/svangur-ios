@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Network
 
@@ -6,11 +7,10 @@ protocol NetworkMonitorProtocol: Sendable {
     var connectionUpdates: AsyncStream<Bool> { get }
 }
 
-@Observable
-final class NetworkMonitor: NetworkMonitorProtocol, @unchecked Sendable {
+final class NetworkMonitor: NetworkMonitorProtocol, ObservableObject, @unchecked Sendable {
     // @unchecked Sendable: NWPathMonitor is thread-safe internally;
     // isConnected is mutated only from the monitor's serial queue → MainActor.
-    private(set) var isConnected = true
+    @Published private(set) var isConnected = true
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.svangur.networkmonitor")
 

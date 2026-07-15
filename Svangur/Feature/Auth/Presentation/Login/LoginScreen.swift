@@ -1,17 +1,17 @@
 import SwiftUI
 
 struct LoginScreen: View {
-    @Environment(AppRouter.self) private var router
-    @Environment(UserSession.self) private var session
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var session: UserSession
     @Environment(\.dismiss) private var dismiss
-    @State var viewModel: LoginViewModel
+    @StateObject var viewModel: LoginViewModel
     @State private var revealPassword = false
 
     @FocusState private var focusedField: Field?
     private enum Field: Hashable { case email, password }
 
     init(viewModel: LoginViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -35,9 +35,9 @@ struct LoginScreen: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .svErrorBanner(loginErrorMessage)
-        .onChange(of: viewModel.effect) { _, effect in
+        .onChange(of: viewModel.effect) { effect in
             guard case .loggedIn(let token) = effect else { return }
             session.adopt(token)
             viewModel.consumeEffect()
@@ -191,7 +191,7 @@ struct LoginScreen: View {
             HStack(spacing: 8) {
                 Group {
                     let styledPrompt = Text(placeholder)
-                        .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                        .foregroundColor(Color(red: 0.361, green: 0.361, blue: 0.361))
                     if isSecure && !revealPassword {
                         SecureField("", text: text, prompt: styledPrompt)
                     } else {
@@ -281,22 +281,22 @@ private enum SvLoginHeaderGradient {
     NavigationStack {
         LoginScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }
 
 #Preview("Login - Submitting") {
     NavigationStack {
         LoginScreen(viewModel: .previewInstance(loadState: .submitting))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }
 
 #Preview("Login - Error") {
     NavigationStack {
         LoginScreen(viewModel: .previewInstance(loadState: .error("Invalid email or password")))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }

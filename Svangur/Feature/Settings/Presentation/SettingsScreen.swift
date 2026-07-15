@@ -3,14 +3,14 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @Environment(UserSession.self) private var session
-    @State var viewModel: SettingsViewModel
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var session: UserSession
+    @StateObject var viewModel: SettingsViewModel
     @State private var showLogoutConfirmation = false
     @State private var showDeleteConfirmation = false
 
     init(viewModel: SettingsViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
     
     var body: some View {
@@ -308,7 +308,7 @@ struct SettingsScreen: View {
         NavigationStack {
             SettingsScreen(viewModel: .previewInstance())
         }
-        .environment(AppRouter())
-        .environment(UserSession(authRepository: MockAuthRepository()))
+        .environmentObject(AppRouter())
+        .environmentObject(UserSession(authRepository: MockAuthRepository()))
     }
 }

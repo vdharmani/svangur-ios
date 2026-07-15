@@ -2,10 +2,10 @@ import SwiftUI
 
 struct ProfileScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @State var viewModel: ProfileViewModel
+    @StateObject var viewModel: ProfileViewModel
 
     init(viewModel: ProfileViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {

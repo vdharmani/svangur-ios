@@ -1,14 +1,14 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class ChangePasswordViewModel {
-    var currentPassword: String = "" { didSet { revalidateIfTouched() } }
-    var newPassword: String = ""     { didSet { revalidateIfTouched() } }
-    var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
+final class ChangePasswordViewModel: ObservableObject {
+    @Published var currentPassword: String = "" { didSet { revalidateIfTouched() } }
+    @Published var newPassword: String = ""     { didSet { revalidateIfTouched() } }
+    @Published var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
 
-    private(set) var state: ChangePasswordUiState = .idle
-    private(set) var validation = ChangePasswordValidation()
+    @Published private(set) var state: ChangePasswordUiState = .idle
+    @Published private(set) var validation = ChangePasswordValidation()
 
     private var hasAttemptedSubmit = false
 

@@ -3,12 +3,12 @@ import SwiftUI
 struct SelectLocationScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: SelectLocationViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: SelectLocationViewModel
     @FocusState private var searchFocused: Bool
 
     init(viewModel: SelectLocationViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {

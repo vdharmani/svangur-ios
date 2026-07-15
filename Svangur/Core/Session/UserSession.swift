@@ -1,10 +1,10 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class UserSession {
-    private(set) var token: AuthToken?
-    private(set) var isInitialized = false
+final class UserSession: ObservableObject {
+    @Published private(set) var token: AuthToken?
+    @Published private(set) var isInitialized = false
 
     private let authRepository: AuthRepositoryProtocol
 

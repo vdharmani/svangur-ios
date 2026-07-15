@@ -1,41 +1,41 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class EditRestaurantViewModel {
-    var nameEn: String = ""        { didSet { revalidateIfTouched() } }
-    var nameIs: String = ""        { didSet { revalidateIfTouched() } }
+final class EditRestaurantViewModel: ObservableObject {
+    @Published var nameEn: String = ""        { didSet { revalidateIfTouched() } }
+    @Published var nameIs: String = ""        { didSet { revalidateIfTouched() } }
     /// Read-only — the update API has no `email` field, so this is display-only.
-    private(set) var adminEmail: String = ""
-    var phoneNumber: String = ""
-    var descriptionEn: String = "" { didSet { revalidateIfTouched() } }
-    var descriptionIs: String = "" { didSet { revalidateIfTouched() } }
-    var address: String = ""
-    var city: String = ""
-    var country: String = ""
+    @Published private(set) var adminEmail: String = ""
+    @Published var phoneNumber: String = ""
+    @Published var descriptionEn: String = "" { didSet { revalidateIfTouched() } }
+    @Published var descriptionIs: String = "" { didSet { revalidateIfTouched() } }
+    @Published var address: String = ""
+    @Published var city: String = ""
+    @Published var country: String = ""
     /// Google Places Autocomplete suggestions for the current `address` text — populated only
     /// via `searchAddressNow()` (the keyboard's "Search" button), never live as the user types.
-    private(set) var addressSuggestions: [PlaceSuggestion] = []
-    var website: String = ""
-    var openingHours: [Weekday: EditDaySchedule] = [:]
+    @Published private(set) var addressSuggestions: [PlaceSuggestion] = []
+    @Published var website: String = ""
+    @Published var openingHours: [Weekday: EditDaySchedule] = [:]
     /// Newly picked local images to upload alongside the update — the API only accepts new
     /// files to add, not a full replacement list, so already-uploaded photos are shown
     /// read-only via `existingImageURLs` and aren't resubmitted.
-    var newImageRefs: [URL] = []
-    private(set) var existingImageURLs: [URL] = []
+    @Published var newImageRefs: [URL] = []
+    @Published private(set) var existingImageURLs: [URL] = []
 
     /// Which restaurant-name language field(s) are shown. At least one is always selected —
     /// toggling the only-selected language is a no-op rather than leaving both off.
-    private(set) var isEnglishNameSelected = true
-    private(set) var isIcelandicNameSelected = true
+    @Published private(set) var isEnglishNameSelected = true
+    @Published private(set) var isIcelandicNameSelected = true
 
     /// Which description language field(s) are shown. Same at-least-one-selected rule as the
     /// name toggles above.
-    private(set) var isEnglishDescriptionSelected = true
-    private(set) var isIcelandicDescriptionSelected = true
+    @Published private(set) var isEnglishDescriptionSelected = true
+    @Published private(set) var isIcelandicDescriptionSelected = true
 
-    private(set) var state: EditRestaurantUiState = .loading
-    private(set) var validation = EditRestaurantValidation()
+    @Published private(set) var state: EditRestaurantUiState = .loading
+    @Published private(set) var validation = EditRestaurantValidation()
     private var hasAttemptedSave = false
 
     private var latitude: Double?
@@ -96,7 +96,7 @@ final class EditRestaurantViewModel {
 
     /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day — displayed
     /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
-    private(set) var openingHoursError: String?
+    @Published private(set) var openingHoursError: String?
 
     func toggleDayOpen(_ day: Weekday) {
         let schedule = openingHours[day] ?? EditDaySchedule(day: day)

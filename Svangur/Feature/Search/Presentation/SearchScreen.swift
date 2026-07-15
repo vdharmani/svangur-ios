@@ -1,13 +1,13 @@
 import SwiftUI
 
 struct SearchScreen: View {
-    @Environment(AppRouter.self) private var router
+    @EnvironmentObject private var router: AppRouter
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @State var viewModel: SearchViewModel
+    @StateObject var viewModel: SearchViewModel
     @FocusState private var isSearchFocused: Bool
-    
+
     init(viewModel: SearchViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
     
     var body: some View {
@@ -33,7 +33,7 @@ struct SearchScreen: View {
             .ignoresSafeArea()
         )
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.onAppear() }
         .onAppear { isSearchFocused = true }
     }
@@ -291,8 +291,8 @@ struct SearchScreen: View {
     NavigationStack {
         SearchScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }
 
 #Preview("Search - No Results") {
@@ -301,8 +301,8 @@ struct SearchScreen: View {
             state: .noResults(query: "sushi")
         ))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }
 
 #Preview("Search - Results") {
@@ -333,8 +333,8 @@ struct SearchScreen: View {
             ])
         ))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
 }
 
 #Preview("Search - Wide (no break)") {
@@ -351,7 +351,7 @@ struct SearchScreen: View {
             ])
         ))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
     .frame(width: 1024, height: 1366)
 }

@@ -2,11 +2,11 @@ import SwiftUI
 
 struct LegalScreen: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(LanguageService.self) private var languageService
-    @State var viewModel: LegalViewModel
+    @EnvironmentObject private var languageService: LanguageService
+    @StateObject var viewModel: LegalViewModel
 
     init(viewModel: LegalViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -82,19 +82,19 @@ struct LegalScreen: View {
     NavigationStack {
         LegalScreen(viewModel: .previewInstance(state: .loading))
     }
-    .environment(LanguageService())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Legal - Loaded") {
     NavigationStack {
         LegalScreen(viewModel: .previewInstance(documentType: .terms, state: .loaded(html: "<h1>Terms</h1><p>Preview.</p>")))
     }
-    .environment(LanguageService())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Legal - Error") {
     NavigationStack {
         LegalScreen(viewModel: .previewInstance(state: .error("Something went wrong")))
     }
-    .environment(LanguageService())
+    .environmentObject(LanguageService())
 }

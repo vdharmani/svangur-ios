@@ -3,13 +3,13 @@ import SwiftUI
 struct ForgotPasswordScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: ForgotPasswordViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: ForgotPasswordViewModel
 
     @FocusState private var emailFocused: Bool
 
     init(viewModel: ForgotPasswordViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -32,8 +32,8 @@ struct ForgotPasswordScreen: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
-        .sensoryFeedback(.success, trigger: viewModel.state == .sent)
+        .toolbar(.hidden, for: .navigationBar)
+        .svSuccessFeedback(trigger: viewModel.state == .sent)
         .task { emailFocused = true }
         .svErrorBanner(forgotPasswordErrorMessage)
     }
@@ -150,7 +150,7 @@ struct ForgotPasswordScreen: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 let styledPrompt = Text(placeholder)
-                    .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                    .foregroundColor(Color(red: 0.361, green: 0.361, blue: 0.361))
                 TextField("", text: text, prompt: styledPrompt)
                     .font(.custom("Poppins-Regular", size: 15, relativeTo: .subheadline))
                     .foregroundStyle(Color(red: 0.067, green: 0.067, blue: 0.067))
@@ -192,14 +192,14 @@ struct ForgotPasswordScreen: View {
     NavigationStack {
         ForgotPasswordScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Forgot - Submitting") {
     NavigationStack {
         ForgotPasswordScreen(viewModel: .previewInstance(state: .submitting))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Forgot - Sent") {
@@ -211,12 +211,12 @@ struct ForgotPasswordScreen: View {
         }()
         ForgotPasswordScreen(viewModel: vm)
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Forgot - Error") {
     NavigationStack {
         ForgotPasswordScreen(viewModel: .previewInstance(state: .error("Network unreachable")))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

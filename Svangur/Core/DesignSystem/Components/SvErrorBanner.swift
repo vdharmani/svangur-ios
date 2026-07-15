@@ -47,7 +47,9 @@ private struct ErrorBannerModifier: ViewModifier {
                     .padding(.top, topPadding)
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: visibleMessage)
-            .onChange(of: message) { _, newMessage in
+            // Single-argument `.onChange(of:perform:)` — the two-argument (old, new) overload is
+            // iOS 17+ only; this project's deployment target is iOS 16.
+            .onChange(of: message) { newMessage in
                 dismissTask?.cancel()
                 visibleMessage = newMessage
                 guard newMessage != nil else { return }

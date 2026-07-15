@@ -1,41 +1,41 @@
 import SwiftUI
+import Combine
 
 enum AddOfferField: Hashable, CaseIterable {
     case title, description, category, discount, validDays, validTime
 }
 
 @MainActor
-@Observable
-final class AddOfferViewModel {
-    private(set) var loadState: AddOfferLoadState
-    private(set) var effect: AddOfferUiEffect?
-    private(set) var validation = OfferDraftValidationErrors()
-    private(set) var showPreview = false
+final class AddOfferViewModel: ObservableObject {
+    @Published private(set) var loadState: AddOfferLoadState
+    @Published private(set) var effect: AddOfferUiEffect?
+    @Published private(set) var validation = OfferDraftValidationErrors()
+    @Published private(set) var showPreview = false
 
     /// Fields the user has actually interacted with, plus whether a Save/Preview attempt has been
     /// made. `displayError(for:)` uses this so selecting one field (e.g. discount) doesn't surface
     /// validation errors for every other untouched field on the form.
-    private(set) var touchedFields: Set<AddOfferField> = []
-    private(set) var hasAttemptedSave = false
+    @Published private(set) var touchedFields: Set<AddOfferField> = []
+    @Published private(set) var hasAttemptedSave = false
 
     /// Real, dynamic owner categories (`GET /categories` via `DealRepositoryProtocol`).
     /// Falls back to `Self.fallbackCategories` if the fetch fails or returns empty, so the
     /// category picker always has something selectable.
-    private(set) var categories: [DealCategory] = []
+    @Published private(set) var categories: [DealCategory] = []
 
     /// Real, dynamic owner discount options (`GET /discount-options` via `DealRepositoryProtocol`).
     /// Falls back to `Self.fallbackDiscountOptions` if the fetch fails or returns empty, so the
     /// discount picker always has something selectable.
-    private(set) var discountOptions: [DiscountOwnerOption] = []
+    @Published private(set) var discountOptions: [DiscountOwnerOption] = []
 
     /// Real, dynamic valid-day options (`GET /days` via `GetDaysUseCaseProtocol`). Falls back to
     /// `Self.fallbackDays` if the fetch fails or returns empty, so the Valid Days chips always
     /// have something selectable. `DayItem.key` (`"mon"`..`"sun"`) round-trips through
     /// `Weekday(dayCode:)` to stay compatible with `OfferDraft.validDays: Set<Weekday>`, the wire
     /// format the offer create/update multipart body depends on.
-    private(set) var days: [DayItem] = []
+    @Published private(set) var days: [DayItem] = []
 
-    var draft: OfferDraft = .empty {
+    @Published var draft: OfferDraft = .empty {
         didSet { revalidate() }
     }
 

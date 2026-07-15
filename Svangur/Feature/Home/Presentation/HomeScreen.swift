@@ -2,14 +2,20 @@ import SwiftUI
 import MapKit
 
 struct HomeScreen: View {
-    @Environment(AppRouter.self) private var router
-    @Environment(UserSession.self) private var session
-    @Environment(LanguageService.self) private var languageService
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var session: UserSession
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @State var viewModel: HomeViewModel
+    @StateObject var viewModel: HomeViewModel
+    // iOS 16 fallback for the Map API below iOS 17 (see `mapContent`) — the legacy
+    // `Map(coordinateRegion:)` initializer needs a bound region; pins/selection are unaffected.
+    @State private var legacyMapRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 40.7138, longitude: -74.0050),
+        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+    )
 
     init(viewModel: HomeViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -32,7 +38,7 @@ struct HomeScreen: View {
         .ignoresSafeArea(edges: .top)
         .background(Color.svBackground)
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .svErrorBanner(viewModel.refreshErrorMessage)
         .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
     }
@@ -184,21 +190,40 @@ struct HomeScreen: View {
 
     private var mapContent: some View {
         ZStack(alignment: .bottom) {
-            Map(initialPosition: .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 40.7138, longitude: -74.0050),
-                span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-            ))) {
-                ForEach(viewModel.mapPins) { pin in
-                    Annotation(pin.restaurantName, coordinate: CLLocationCoordinate2D(
-                        latitude: pin.latitude, longitude: pin.longitude
-                    )) {
-                        mapPinView(pin)
+            Group {
+                if #available(iOS 17, *) {
+                    Map(initialPosition: .region(MKCoordinateRegion(
+                        center: CLLocationCoordinate2D(latitude: 40.7138, longitude: -74.0050),
+                        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+                    ))) {
+                        ForEach(viewModel.mapPins) { pin in
+                            Annotation(pin.restaurantName, coordinate: CLLocationCoordinate2D(
+                                latitude: pin.latitude, longitude: pin.longitude
+                            )) {
+                                mapPinView(pin)
+                            }
+                        }
+                    }
+                    .mapControls {
+                        MapUserLocationButton()
+                        MapCompass()
+                    }
+                } else {
+                    // iOS 16 fallback — the legacy `Map(coordinateRegion:...)` initializer has no
+                    // equivalent for `.mapControls` (compass / user-location button), so those are
+                    // simply omitted here. Pin rendering + selection behavior is unchanged.
+                    Map(
+                        coordinateRegion: $legacyMapRegion,
+                        interactionModes: .all,
+                        annotationItems: viewModel.mapPins
+                    ) { pin in
+                        MapAnnotation(coordinate: CLLocationCoordinate2D(
+                            latitude: pin.latitude, longitude: pin.longitude
+                        )) {
+                            mapPinView(pin)
+                        }
                     }
                 }
-            }
-            .mapControls {
-                MapUserLocationButton()
-                MapCompass()
             }
             .ignoresSafeArea(edges: .bottom)
 
@@ -857,18 +882,18 @@ struct HomeScreen: View {
     NavigationStack {
         HomeScreen(viewModel: .previewInstance(state: .empty))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Home - Loading") {
     NavigationStack {
         HomeScreen(viewModel: .previewInstance(state: .loading))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Home - Loaded") {
@@ -886,9 +911,9 @@ struct HomeScreen: View {
             ),
         ])))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Home - Map") {
@@ -900,17 +925,17 @@ struct HomeScreen: View {
             return vm
         }())
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Home - Wide (no break)") {
     NavigationStack {
         HomeScreen(viewModel: .previewInstance(state: .empty))
     }
-    .environment(AppRouter())
-    .environment(UserSession(authRepository: MockAuthRepository()))
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
     .frame(width: 1024, height: 1366)
 }

@@ -1,15 +1,15 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class SelectLocationViewModel {
+final class SelectLocationViewModel: ObservableObject {
 
-    var query: String = "" {
+    @Published var query: String = "" {
         didSet { scheduleSearch() }
     }
 
-    private(set) var state: SelectLocationUiState = .idle
-    private(set) var recentSearches: [String] = []
+    @Published private(set) var state: SelectLocationUiState = .idle
+    @Published private(set) var recentSearches: [String] = []
 
     /// `nonisolated(unsafe)`: only ever mutated from `@MainActor` methods, except for the
     /// `cancel()` call in `deinit` — see `RegisterRestaurantViewModel.addressSearchTask` for

@@ -4,9 +4,9 @@ import PhotosUI
 struct AddOfferScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @Environment(LanguageService.self) private var languageService
-    @State var viewModel: AddOfferViewModel
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var languageService: LanguageService
+    @StateObject var viewModel: AddOfferViewModel
 
     @State private var showCategorySheet = false
     @State private var showDiscountSheet = false
@@ -16,7 +16,7 @@ struct AddOfferScreen: View {
     private enum Field: Hashable { case title, description }
 
     init(viewModel: AddOfferViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -69,13 +69,13 @@ struct AddOfferScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(Color.svBackground.ignoresSafeArea())
         .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
-        .onChange(of: viewModel.effect) { _, effect in
+        .onChange(of: viewModel.effect) { effect in
             guard case .saved = effect else { return }
             viewModel.consumeEffect()
             router.popToRoot()
             router.navigate(to: .dashboard)
         }
-        .onChange(of: photoSelection) { _, items in
+        .onChange(of: photoSelection) { items in
             Task { await loadSelectedPhotos(items) }
         }
         .sheet(isPresented: $showCategorySheet) {
@@ -255,7 +255,7 @@ struct AddOfferScreen: View {
                 .submitLabel(.next)
                 .onSubmit { focusedField = .description }
                 .textInputAutocapitalization(.sentences)
-                .onChange(of: viewModel.draft.title) { _, new in
+                .onChange(of: viewModel.draft.title) { new in
                     viewModel.markTouched(.title)
                     if new.count > ValidateOfferDraftUseCase.titleMaxLength {
                         viewModel.draft.title = String(new.prefix(ValidateOfferDraftUseCase.titleMaxLength))
@@ -280,7 +280,7 @@ struct AddOfferScreen: View {
             .textFieldStyle(SvFieldStyle())
             .focused($focusedField, equals: .description)
             .textInputAutocapitalization(.sentences)
-            .onChange(of: viewModel.draft.description) { _, new in
+            .onChange(of: viewModel.draft.description) { new in
                 viewModel.markTouched(.description)
                 if new.count > ValidateOfferDraftUseCase.descriptionMaxLength {
                     viewModel.draft.description = String(new.prefix(ValidateOfferDraftUseCase.descriptionMaxLength))
@@ -789,8 +789,8 @@ private struct DiscountPickerSheet: View {
     NavigationStack {
         AddOfferScreen(viewModel: .previewInstance(mode: .create))
     }
-    .environment(AppRouter())
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Add - Filled") {
@@ -800,8 +800,8 @@ private struct DiscountPickerSheet: View {
             prefilledDraft: OfferDraft(from: MockOfferRepository.seed[0])
         ))
     }
-    .environment(AppRouter())
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Edit") {
@@ -811,8 +811,8 @@ private struct DiscountPickerSheet: View {
             prefilledDraft: OfferDraft(from: MockOfferRepository.seed[0])
         ))
     }
-    .environment(AppRouter())
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Add - Wide (no break)") {
@@ -823,6 +823,6 @@ private struct DiscountPickerSheet: View {
         ))
         .frame(width: 1024, height: 1366)
     }
-    .environment(AppRouter())
-    .environment(LanguageService())
+    .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }

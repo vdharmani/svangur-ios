@@ -2,22 +2,12 @@ import SwiftUI
 import MapKit
 
 struct ConfirmLocationScreen: View {
-    @Environment(AppRouter.self) private var router
+    @EnvironmentObject private var router: AppRouter
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @State var viewModel: ConfirmLocationViewModel
-    @State private var cameraPosition: MapCameraPosition
+    @StateObject var viewModel: ConfirmLocationViewModel
 
     init(viewModel: ConfirmLocationViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
-        self._cameraPosition = State(initialValue: .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(
-                    latitude: viewModel.latitude,
-                    longitude: viewModel.longitude
-                ),
-                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-            )
-        ))
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -42,27 +32,31 @@ struct ConfirmLocationScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.onAppear()
-            cameraPosition = .region(
-                MKCoordinateRegion(
-                    center: viewModel.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                )
-            )
         }
     }
 
     // MARK: - Map
+    //
+    // `MapCameraPosition` (used by the iOS 17+ `Map(position:)` initializer) is itself an
+    // iOS-17-only type — even declaring a `@State private var: MapCameraPosition` on a struct
+    // that must compile unconditionally at an iOS 16 deployment target is a build error,
+    // regardless of any `#available` runtime guard around its *usage*. So the two Map variants
+    // are split into separate child View types below: `ModernMapLayer` is itself annotated
+    // `@available(iOS 17, *)` (its `MapCameraPosition` property is then valid), and
+    // `LegacyMapLayer` is the iOS 16-safe fallback using the legacy `Map(coordinateRegion:)` API.
+    // Both react to `viewModel.latitude`/`longitude` changing (e.g. once `onAppear()` resolves a
+    // real place) by recentering themselves.
 
+    @ViewBuilder
     private var mapLayer: some View {
-        Map(position: $cameraPosition)
-            .mapStyle(.standard(elevation: .flat))
-            .onMapCameraChange { context in
-                viewModel.updateCoordinate(
-                    latitude: context.region.center.latitude,
-                    longitude: context.region.center.longitude
-                )
-            }
-            .ignoresSafeArea()
+        if #available(iOS 17, *) {
+            ModernMapLayer(viewModel: viewModel)
+        } else {
+            // iOS 16 fallback — no `.mapStyle`/`.onMapCameraChange` equivalent; a custom
+            // `Binding` forwards every region change (drag/zoom) to `viewModel.updateCoordinate`,
+            // preserving the "confirm location by dragging the map" behavior.
+            LegacyMapLayer(viewModel: viewModel)
+        }
     }
 
     // MARK: - Center pin marker (fixed at screen center)
@@ -172,6 +166,86 @@ struct ConfirmLocationScreen: View {
     }
 }
 
+// MARK: - Map layer variants
+
+@available(iOS 17, *)
+private struct ModernMapLayer: View {
+    @ObservedObject var viewModel: ConfirmLocationViewModel
+    @State private var cameraPosition: MapCameraPosition
+
+    init(viewModel: ConfirmLocationViewModel) {
+        self.viewModel = viewModel
+        self._cameraPosition = State(initialValue: .region(
+            MKCoordinateRegion(
+                center: viewModel.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+            )
+        ))
+    }
+
+    var body: some View {
+        Map(position: $cameraPosition)
+            .mapStyle(.standard(elevation: .flat))
+            .onMapCameraChange { context in
+                viewModel.updateCoordinate(
+                    latitude: context.region.center.latitude,
+                    longitude: context.region.center.longitude
+                )
+            }
+            // Recenters once `viewModel.onAppear()` resolves a real place (async, after this
+            // view is first created with the placeholder coordinate).
+            .onChange(of: viewModel.latitude) { _, _ in
+                cameraPosition = .region(
+                    MKCoordinateRegion(
+                        center: viewModel.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    )
+                )
+            }
+            .ignoresSafeArea()
+    }
+}
+
+private struct LegacyMapLayer: View {
+    @ObservedObject var viewModel: ConfirmLocationViewModel
+    @State private var region: MKCoordinateRegion
+
+    init(viewModel: ConfirmLocationViewModel) {
+        self.viewModel = viewModel
+        self._region = State(initialValue: MKCoordinateRegion(
+            center: viewModel.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        ))
+    }
+
+    var body: some View {
+        Map(coordinateRegion: regionBinding)
+            // Recenters once `viewModel.onAppear()` resolves a real place. Uses the iOS
+            // 14-compatible single-argument `.onChange(of:perform:)` overload since this view
+            // has no `@available` guard.
+            .onChange(of: viewModel.latitude) { _ in
+                region = MKCoordinateRegion(
+                    center: viewModel.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                )
+            }
+            .ignoresSafeArea()
+    }
+
+    private var regionBinding: Binding<MKCoordinateRegion> {
+        Binding(
+            get: { region },
+            set: { newRegion in
+                region = newRegion
+                viewModel.updateCoordinate(
+                    latitude: newRegion.center.latitude,
+                    longitude: newRegion.center.longitude
+                )
+            }
+        )
+    }
+}
+
 // Local map-marker tokens — promote to Color.svMapPin* in the Asset Catalog
 // when the design system adds a map palette.
 private extension Color {
@@ -185,12 +259,12 @@ private extension Color {
     NavigationStack {
         ConfirmLocationScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Confirm Location - Current") {
     NavigationStack {
         ConfirmLocationScreen(viewModel: .previewInstance(name: "Current location"))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

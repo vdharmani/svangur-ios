@@ -3,7 +3,7 @@ import SwiftUI
 struct ChangePasswordScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @State var viewModel: ChangePasswordViewModel
+    @StateObject var viewModel: ChangePasswordViewModel
 
     @FocusState private var focusedField: Field?
     @State private var revealCurrent = false
@@ -12,7 +12,7 @@ struct ChangePasswordScreen: View {
     private enum Field: Hashable { case currentPassword, newPassword, confirmPassword }
 
     init(viewModel: ChangePasswordViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -36,7 +36,7 @@ struct ChangePasswordScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .sensoryFeedback(.success, trigger: viewModel.state == .success)
+        .svSuccessFeedback(trigger: viewModel.state == .success)
         .task { focusedField = .currentPassword }
         .svErrorBanner(changePasswordErrorMessage)
     }
@@ -161,7 +161,7 @@ struct ChangePasswordScreen: View {
     ) -> some View {
         HStack(spacing: 8) {
             let styledPrompt = Text(placeholder)
-                .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                .foregroundColor(Color(red: 0.361, green: 0.361, blue: 0.361))
             Group {
                 if reveal.wrappedValue {
                     TextField("", text: text, prompt: styledPrompt)

@@ -1,12 +1,12 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class SettingsViewModel {
-    private(set) var profile: RestaurantProfileUi?
+final class SettingsViewModel: ObservableObject {
+    @Published private(set) var profile: RestaurantProfileUi?
 
-    private(set) var isLoggingOut = false
-    private(set) var errorMessage: String?
+    @Published private(set) var isLoggingOut = false
+    @Published private(set) var errorMessage: String?
 
     private let logoutUseCase: LogoutUseCaseProtocol
     private let getRestaurantProfileUseCase: GetRestaurantProfileUseCaseProtocol

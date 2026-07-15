@@ -1,13 +1,13 @@
 import SwiftUI
+import Combine
 import CoreLocation
 
 @MainActor
-@Observable
-final class ConfirmLocationViewModel {
+final class ConfirmLocationViewModel: ObservableObject {
     let name: String
-    private(set) var address: String
-    private(set) var latitude: Double
-    private(set) var longitude: Double
+    @Published private(set) var address: String
+    @Published private(set) var latitude: Double
+    @Published private(set) var longitude: Double
 
     private let placesService: PlacesServiceProtocol
     /// The Google Places `place_id` the user picked on the search screen — `nil` for a recent

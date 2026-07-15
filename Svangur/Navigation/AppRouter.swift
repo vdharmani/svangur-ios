@@ -1,8 +1,8 @@
 import SwiftUI
+import Combine
 
-@Observable
-final class AppRouter {
-    var path = NavigationPath()
+final class AppRouter: ObservableObject {
+    @Published var path = NavigationPath()
 
     func navigate(to route: AppRoute) {
         path.append(route)

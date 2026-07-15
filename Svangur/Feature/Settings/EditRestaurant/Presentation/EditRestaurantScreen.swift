@@ -5,12 +5,12 @@ import UIKit
 struct EditRestaurantScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @State var viewModel: EditRestaurantViewModel
+    @StateObject var viewModel: EditRestaurantViewModel
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
 
     init(viewModel: EditRestaurantViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -38,7 +38,7 @@ struct EditRestaurantScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.onAppear() }
-        .onChange(of: photoSelection) { _, newItems in
+        .onChange(of: photoSelection) { newItems in
             Task {
                 for item in newItems {
                     guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
@@ -54,8 +54,8 @@ struct EditRestaurantScreen: View {
             }
             .ignoresSafeArea()
         }
-        .sensoryFeedback(.success, trigger: viewModel.state == .saved)
-        .onChange(of: viewModel.state) { _, newState in
+        .svSuccessFeedback(trigger: viewModel.state == .saved)
+        .onChange(of: viewModel.state) { newState in
             guard newState == .saved else { return }
             dismiss()
         }
@@ -114,7 +114,7 @@ struct EditRestaurantScreen: View {
             }
             fieldSection(heading: "Phone Number") {
                 pinkTextField(text: $viewModel.phoneNumber, keyboard: .phonePad, contentType: .telephoneNumber)
-                    .onChange(of: viewModel.phoneNumber) { _, newValue in
+                    .onChange(of: viewModel.phoneNumber) { newValue in
                         let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
                         if clamped != newValue { viewModel.phoneNumber = clamped }
                     }
@@ -156,7 +156,7 @@ struct EditRestaurantScreen: View {
 
             if viewModel.isEnglishNameSelected {
                 pinkTextField(text: $viewModel.nameEn, autocapitalization: .words)
-                    .onChange(of: viewModel.nameEn) { _, newValue in
+                    .onChange(of: viewModel.nameEn) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
                         )
@@ -166,7 +166,7 @@ struct EditRestaurantScreen: View {
             }
             if viewModel.isIcelandicNameSelected {
                 pinkTextField(text: $viewModel.nameIs, autocapitalization: .words)
-                    .onChange(of: viewModel.nameIs) { _, newValue in
+                    .onChange(of: viewModel.nameIs) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
                         )
@@ -585,7 +585,7 @@ private struct EditTimeChip: View {
             .datePickerStyle(.wheel)
             .labelsHidden()
             .padding()
-            .presentationCompactAdaptation(.popover)
+            .svPopoverCompactAdaptation()
         }
     }
 

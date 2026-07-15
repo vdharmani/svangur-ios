@@ -67,28 +67,38 @@ struct SvTextField: View {
 }
 
 #Preview("Fields") {
-    @Previewable @State var email = ""
-    @Previewable @State var password = "secret"
-    return VStack(spacing: SvSpacing.formFieldSpacing) {
-        SvTextField(
-            placeholder: "Email",
-            text: $email,
-            keyboard: .emailAddress,
-            contentType: .emailAddress
-        )
-        SvTextField(
-            placeholder: "Password",
-            text: $password,
-            isSecure: true,
-            contentType: .password
-        )
-        SvTextField(
-            placeholder: "Email",
-            text: .constant("not-an-email"),
-            keyboard: .emailAddress,
-            errorKey: "Invalid email"
-        )
+    SvTextFieldPreviewContainer()
+}
+
+// `@Previewable` (Swift 5.10/Xcode 16 preview macro) is iOS 17+ only — with this project's
+// iOS 16 deployment target, `#Preview` bodies that need local `@State` fall back to a small
+// private wrapper `View` instead.
+private struct SvTextFieldPreviewContainer: View {
+    @State private var email = ""
+    @State private var password = "secret"
+
+    var body: some View {
+        VStack(spacing: SvSpacing.formFieldSpacing) {
+            SvTextField(
+                placeholder: "Email",
+                text: $email,
+                keyboard: .emailAddress,
+                contentType: .emailAddress
+            )
+            SvTextField(
+                placeholder: "Password",
+                text: $password,
+                isSecure: true,
+                contentType: .password
+            )
+            SvTextField(
+                placeholder: "Email",
+                text: .constant("not-an-email"),
+                keyboard: .emailAddress,
+                errorKey: "Invalid email"
+            )
+        }
+        .padding(SvSpacing.screenPadding)
+        .background(Color.svBackground)
     }
-    .padding(SvSpacing.screenPadding)
-    .background(Color.svBackground)
 }

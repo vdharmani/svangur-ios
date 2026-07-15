@@ -1,35 +1,35 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class HomeViewModel {
+final class HomeViewModel: ObservableObject {
     // MARK: - Filter state
-    private(set) var selectedCategory: OfferCategory?
+    @Published private(set) var selectedCategory: OfferCategory?
     /// Real, dynamic discount filters (`GET /discount-options` `user_filters` via
     /// `DealRepositoryProtocol`). Falls back to `Self.fallbackDiscountFilters` if the fetch
     /// fails or returns empty, so the chip row always has something selectable.
-    private(set) var discountFilters: [DiscountUserFilter] = HomeViewModel.fallbackDiscountFilters
-    private(set) var selectedDiscountFilterKey: String = "all"
+    @Published private(set) var discountFilters: [DiscountUserFilter] = HomeViewModel.fallbackDiscountFilters
+    @Published private(set) var selectedDiscountFilterKey: String = "all"
     /// Real, dynamic days (`GET /days` via `GetDaysUseCaseProtocol`) — labels, key order, and
     /// which one `isToday` all come from the server (tz-aware), not the device's local
     /// `Calendar`. Falls back to a locally-computed Mon–Sun list if the fetch fails.
-    private(set) var days: [DayItem] = HomeViewModel.fallbackDays()
-    private(set) var selectedDayKey: String?
+    @Published private(set) var days: [DayItem] = HomeViewModel.fallbackDays()
+    @Published private(set) var selectedDayKey: String?
     /// Guards against an in-flight `loadDays(lang:)` overwriting a day the user already picked.
     private var userSelectedDay = false
-    private(set) var openNowOnly: Bool = true
+    @Published private(set) var openNowOnly: Bool = true
 
     // MARK: - UI state
-    private(set) var state: HomeUiState = .idle
-    var viewMode: ViewMode = .list
-    private(set) var locationDisplayText: String = "Detecting location…"
+    @Published private(set) var state: HomeUiState = .idle
+    @Published var viewMode: ViewMode = .list
+    @Published private(set) var locationDisplayText: String = "Detecting location…"
     /// A pull-to-refresh (or filter-change) failure while deals are already visible — surfaced
     /// as a banner rather than replacing `state` (which would wipe the still-valid list).
-    private(set) var refreshErrorMessage: String?
+    @Published private(set) var refreshErrorMessage: String?
 
     // MARK: - Map state
     let mapPins: [DealMapPin] = DealMapPin.mockPins
-    private(set) var selectedPin: DealMapPin?
+    @Published private(set) var selectedPin: DealMapPin?
 
     enum ViewMode { case list, map }
 

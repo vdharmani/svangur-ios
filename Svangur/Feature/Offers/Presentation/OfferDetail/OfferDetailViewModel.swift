@@ -1,10 +1,10 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class OfferDetailViewModel {
-    private(set) var state: OfferDetailUiState = .idle
-    private(set) var isDeleting = false
+final class OfferDetailViewModel: ObservableObject {
+    @Published private(set) var state: OfferDetailUiState = .idle
+    @Published private(set) var isDeleting = false
 
     /// Transient error from a *failed action* (currently: delete) taken while the offer detail
     /// was already loaded and visible. Kept separate from `state` so a delete failure surfaces
@@ -12,7 +12,7 @@ final class OfferDetailViewModel {
     /// with the full-screen `.error` state — the previous behavior replaced the visible offer
     /// with an error screen just because the delete call failed. Cleared at the start of the
     /// next delete attempt.
-    private(set) var actionErrorMessage: String?
+    @Published private(set) var actionErrorMessage: String?
 
     let offerId: Int64
 

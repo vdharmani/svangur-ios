@@ -1,9 +1,9 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class ProfileViewModel {
-    private(set) var state: ProfileUiState = .idle
+final class ProfileViewModel: ObservableObject {
+    @Published private(set) var state: ProfileUiState = .idle
 
     private let getUserProfileUseCase: GetUserProfileUseCaseProtocol
     private let userId: String

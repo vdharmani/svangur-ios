@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(AppRouter.self) private var router
+    @EnvironmentObject private var router: AppRouter
 
     var body: some View {
         VStack(spacing: 24) {
@@ -38,5 +38,5 @@ struct ContentView: View {
     NavigationStack {
         ContentView()
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

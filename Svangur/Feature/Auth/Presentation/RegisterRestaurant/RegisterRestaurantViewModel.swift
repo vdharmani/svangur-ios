@@ -1,41 +1,41 @@
 import SwiftUI
+import Combine
 import CoreLocation
 
 @MainActor
-@Observable
-final class RegisterRestaurantViewModel {
+final class RegisterRestaurantViewModel: ObservableObject {
     // MARK: - Form fields
-    var restaurantName: String = "" { didSet { revalidateIfTouched() } }
-    var restaurantNameIcelandic: String = "" { didSet { revalidateIfTouched() } }
-    var email: String = ""          { didSet { revalidateIfTouched() } }
-    var password: String = ""       { didSet { revalidateIfTouched() } }
-    var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
-    var phoneNumber: String = ""    { didSet { revalidateIfTouched() } }
-    var description: String = ""    { didSet { revalidateIfTouched() } }
-    var descriptionIcelandic: String = "" { didSet { revalidateIfTouched() } }
-    var address: String = ""        { didSet { revalidateIfTouched() } }
-    var city: String = ""           { didSet { revalidateIfTouched() } }
+    @Published var restaurantName: String = "" { didSet { revalidateIfTouched() } }
+    @Published var restaurantNameIcelandic: String = "" { didSet { revalidateIfTouched() } }
+    @Published var email: String = ""          { didSet { revalidateIfTouched() } }
+    @Published var password: String = ""       { didSet { revalidateIfTouched() } }
+    @Published var confirmPassword: String = "" { didSet { revalidateIfTouched() } }
+    @Published var phoneNumber: String = ""    { didSet { revalidateIfTouched() } }
+    @Published var description: String = ""    { didSet { revalidateIfTouched() } }
+    @Published var descriptionIcelandic: String = "" { didSet { revalidateIfTouched() } }
+    @Published var address: String = ""        { didSet { revalidateIfTouched() } }
+    @Published var city: String = ""           { didSet { revalidateIfTouched() } }
     /// No static fallback on purpose — only ever set from the live reverse-geocode result in
     /// `onAppear()`. Stays empty (and the server will reject the submission) if location/geocoding
     /// fails, rather than silently defaulting to a guessed country.
-    var country: String = ""
-    var imageRefs: [URL] = []
-    var documentRef: URL?
-    var openingHours: [Weekday: DaySchedule] = RegisterRestaurantViewModel.defaultOpeningHours()
-    var isEditing: Bool
+    @Published var country: String = ""
+    @Published var imageRefs: [URL] = []
+    @Published var documentRef: URL?
+    @Published var openingHours: [Weekday: DaySchedule] = RegisterRestaurantViewModel.defaultOpeningHours()
+    @Published var isEditing: Bool
 
     /// Which restaurant-name language field(s) are shown. At least one is always selected —
     /// toggling the only-selected language is a no-op rather than leaving both off.
-    private(set) var isEnglishNameSelected = true
-    private(set) var isIcelandicNameSelected = true
+    @Published private(set) var isEnglishNameSelected = true
+    @Published private(set) var isIcelandicNameSelected = true
 
     /// Which description language field(s) are shown. Same at-least-one-selected rule as the
     /// name toggles above.
-    private(set) var isEnglishDescriptionSelected = true
-    private(set) var isIcelandicDescriptionSelected = true
+    @Published private(set) var isEnglishDescriptionSelected = true
+    @Published private(set) var isIcelandicDescriptionSelected = true
 
     /// Google Places Autocomplete suggestions for the current `address` text.
-    private(set) var addressSuggestions: [PlaceSuggestion] = []
+    @Published private(set) var addressSuggestions: [PlaceSuggestion] = []
     /// `nonisolated(unsafe)`: only ever mutated from `@MainActor` methods, except for the
     /// `cancel()` call in `deinit`, which is inherently exclusive (no other reference to
     /// `self` can exist by the time `deinit` runs) and `Task.cancel()` itself is thread-safe.
@@ -45,12 +45,12 @@ final class RegisterRestaurantViewModel {
     private var lastSelectedAddress: String?
 
     // MARK: - State
-    private(set) var state: RegisterRestaurantUiState = .idle
-    private(set) var validation = RegistrationValidation()
+    @Published private(set) var state: RegisterRestaurantUiState = .idle
+    @Published private(set) var validation = RegistrationValidation()
     /// Best-effort — `nil` if the user denied permission or a fix couldn't be obtained;
     /// registration still proceeds without coordinates in that case.
-    private(set) var capturedLatitude: Double?
-    private(set) var capturedLongitude: Double?
+    @Published private(set) var capturedLatitude: Double?
+    @Published private(set) var capturedLongitude: Double?
 
     private var hasAttemptedSubmit = false
     /// Set only by the final "Submit for Approval" tap — gates display of the Business Details
@@ -182,7 +182,7 @@ final class RegisterRestaurantViewModel {
     // MARK: - Schedule mutators
     /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day — displayed
     /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
-    private(set) var openingHoursError: String?
+    @Published private(set) var openingHoursError: String?
 
     func toggleDayOpen(_ day: Weekday) {
         var schedule = openingHours[day] ?? .standardOpen
@@ -211,7 +211,7 @@ final class RegisterRestaurantViewModel {
     }
 
     // MARK: - Image / document mutators
-    private(set) var imageSizeErrorMessage: String?
+    @Published private(set) var imageSizeErrorMessage: String?
 
     func clearImageSizeError() {
         imageSizeErrorMessage = nil

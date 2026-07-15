@@ -2,11 +2,11 @@ import SwiftUI
 
 struct DashboardScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: DashboardViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: DashboardViewModel
 
     init(viewModel: DashboardViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -32,7 +32,7 @@ struct DashboardScreen: View {
         }
         .background(Color.svBackground.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .svErrorBanner(viewModel.actionErrorMessage)
         .task { await viewModel.onAppear() }
         .blur(radius: viewModel.offerIdToDelete != nil ? 2 : 0)
@@ -512,28 +512,28 @@ struct DashboardScreen: View {
             state: .loaded(MockOfferRepository.seed.map { $0.toUi() })
         ))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Dashboard - Loading") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(state: .loading))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Dashboard - Empty") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(state: .empty))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Dashboard - Error") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(state: .error("Network error")))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Dashboard - Wide (no break)") {
@@ -543,5 +543,5 @@ struct DashboardScreen: View {
         ))
         .frame(width: 1024, height: 1366)
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

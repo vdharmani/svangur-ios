@@ -3,8 +3,8 @@ import SwiftUI
 struct ResetPasswordScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: ResetPasswordViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: ResetPasswordViewModel
 
     @FocusState private var focusedField: Field?
     @State private var revealNew = false
@@ -12,7 +12,7 @@ struct ResetPasswordScreen: View {
     private enum Field: Hashable { case newPassword, confirmPassword }
 
     init(viewModel: ResetPasswordViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -36,7 +36,7 @@ struct ResetPasswordScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .sensoryFeedback(.success, trigger: viewModel.state == .success)
+        .svSuccessFeedback(trigger: viewModel.state == .success)
         .task { focusedField = .newPassword }
         .svErrorBanner(resetErrorMessage)
     }
@@ -129,7 +129,7 @@ struct ResetPasswordScreen: View {
     ) -> some View {
         HStack(spacing: 8) {
             let styledPrompt = Text(placeholder)
-                .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                .foregroundColor(Color(red: 0.361, green: 0.361, blue: 0.361))
             Group {
                 if reveal.wrappedValue {
                     TextField("", text: text, prompt: styledPrompt)
@@ -211,26 +211,26 @@ struct ResetPasswordScreen: View {
     NavigationStack {
         ResetPasswordScreen(viewModel: .previewInstance())
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Reset - Submitting") {
     NavigationStack {
         ResetPasswordScreen(viewModel: .previewInstance(state: .submitting))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Reset - Success") {
     NavigationStack {
         ResetPasswordScreen(viewModel: .previewInstance(state: .success))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Reset - Error") {
     NavigationStack {
         ResetPasswordScreen(viewModel: .previewInstance(state: .error("Token expired")))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

@@ -3,13 +3,13 @@ import SwiftUI
 struct OfferDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: OfferDetailViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: OfferDetailViewModel
 
     @State private var showDeleteConfirm = false
 
     init(viewModel: OfferDetailViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -202,19 +202,19 @@ private struct DetailRow: View {
             state: .loaded(MockOfferRepository.seed[0].toUi())
         ))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Detail - Loading") {
     NavigationStack {
         OfferDetailScreen(viewModel: .previewInstance(state: .loading))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }
 
 #Preview("Detail - Error") {
     NavigationStack {
         OfferDetailScreen(viewModel: .previewInstance(state: .error("Not found")))
     }
-    .environment(AppRouter())
+    .environmentObject(AppRouter())
 }

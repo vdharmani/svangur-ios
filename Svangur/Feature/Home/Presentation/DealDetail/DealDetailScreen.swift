@@ -3,12 +3,12 @@ import SwiftUI
 struct DealDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @State var viewModel: DealDetailViewModel
+    @EnvironmentObject private var router: AppRouter
+    @StateObject var viewModel: DealDetailViewModel
     @State private var showDeleteConfirmation = false
 
     init(viewModel: DealDetailViewModel) {
-        self._viewModel = State(wrappedValue: viewModel)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -36,7 +36,7 @@ struct DealDetailScreen: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.onAppear() }
     }
 

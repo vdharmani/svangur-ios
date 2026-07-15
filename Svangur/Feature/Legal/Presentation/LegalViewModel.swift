@@ -1,9 +1,9 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class LegalViewModel {
-    private(set) var state: LegalUiState = .idle
+final class LegalViewModel: ObservableObject {
+    @Published private(set) var state: LegalUiState = .idle
 
     let documentType: LegalDocumentType
     private let getLegalDocumentUseCase: GetLegalDocumentUseCaseProtocol

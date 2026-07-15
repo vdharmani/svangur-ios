@@ -1,9 +1,9 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class DealDetailViewModel {
-    private(set) var state: DealDetailUiState = .idle
+final class DealDetailViewModel: ObservableObject {
+    @Published private(set) var state: DealDetailUiState = .idle
 
     let dealId: Int64
     private let getOfferUseCase: GetOfferUseCaseProtocol

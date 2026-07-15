@@ -1,15 +1,15 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class LoginViewModel {
-    var email: String = "" { didSet { revalidateIfTouched() } }
-    var password: String = "" { didSet { revalidateIfTouched() } }
-    var rememberMe: Bool = false
+final class LoginViewModel: ObservableObject {
+    @Published var email: String = "" { didSet { revalidateIfTouched() } }
+    @Published var password: String = "" { didSet { revalidateIfTouched() } }
+    @Published var rememberMe: Bool = false
 
-    private(set) var loadState: LoginLoadState = .ready
-    private(set) var validation = CredentialsValidation()
-    private(set) var effect: LoginUiEffect?
+    @Published private(set) var loadState: LoginLoadState = .ready
+    @Published private(set) var validation = CredentialsValidation()
+    @Published private(set) var effect: LoginUiEffect?
 
     private var hasAttemptedSubmit = false
 

@@ -1,12 +1,12 @@
 import SwiftUI
+import Combine
 
 @MainActor
-@Observable
-final class ForgotPasswordViewModel {
-    var email: String = "" { didSet { revalidateIfTouched() } }
+final class ForgotPasswordViewModel: ObservableObject {
+    @Published var email: String = "" { didSet { revalidateIfTouched() } }
 
-    private(set) var state: ForgotPasswordUiState = .idle
-    private(set) var emailError: ValidationError?
+    @Published private(set) var state: ForgotPasswordUiState = .idle
+    @Published private(set) var emailError: ValidationError?
 
     private var hasAttemptedSubmit = false
 
