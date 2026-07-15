@@ -1,11 +1,13 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct EditRestaurantScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
     @State var viewModel: EditRestaurantViewModel
     @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var showCamera = false
 
     init(viewModel: EditRestaurantViewModel) {
         self._viewModel = State(wrappedValue: viewModel)
@@ -40,20 +42,34 @@ struct EditRestaurantScreen: View {
             Task {
                 for item in newItems {
                     guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-                    let url = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(UUID().uuidString)
-                        .appendingPathExtension("jpg")
-                    guard (try? data.write(to: url)) != nil else { continue }
-                    viewModel.addImage(url)
+                    saveImageData(data)
                 }
                 photoSelection = []
             }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera) { image in
+                guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+                saveImageData(data)
+            }
+            .ignoresSafeArea()
         }
         .sensoryFeedback(.success, trigger: viewModel.state == .saved)
         .onChange(of: viewModel.state) { _, newState in
             guard newState == .saved else { return }
             dismiss()
         }
+        .svErrorBanner(editRestaurantErrorMessage)
+    }
+
+    /// Server/API errors surface as a banner over the top of the screen — distinct from
+    /// per-field validation. `.error` is also reachable from a failed *initial* load (before
+    /// `apply(_:)` has populated the form), but the dedicated `.loading` state already owns the
+    /// true "nothing to show yet" moment (a blocking `ProgressView`, no form), so surfacing this
+    /// as a banner here doesn't remove any distinct empty/retry experience.
+    private var editRestaurantErrorMessage: String? {
+        guard case .error(let message) = viewModel.state else { return nil }
+        return message
     }
 
     // MARK: - Header
@@ -98,21 +114,19 @@ struct EditRestaurantScreen: View {
             }
             fieldSection(heading: "Phone Number") {
                 pinkTextField(text: $viewModel.phoneNumber, keyboard: .phonePad, contentType: .telephoneNumber)
+                    .onChange(of: viewModel.phoneNumber) { _, newValue in
+                        let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
+                        if clamped != newValue { viewModel.phoneNumber = clamped }
+                    }
             }
+            locationSection
             descriptionSection
 
             openingHoursSection
 
-            if case .error(let message) = viewModel.state {
-                Text(message)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svError)
-            }
-
             SvPrimaryButton(
                 title: "Save Changes",
-                isLoading: viewModel.state == .saving,
-                isEnabled: viewModel.canSubmit
+                isLoading: viewModel.state == .saving
             ) {
                 Task { await viewModel.save() }
             }
@@ -142,11 +156,72 @@ struct EditRestaurantScreen: View {
 
             if viewModel.isEnglishNameSelected {
                 pinkTextField(text: $viewModel.nameEn, autocapitalization: .words)
+                    .onChange(of: viewModel.nameEn) { _, newValue in
+                        let filtered = newValue.filteredToLettersAndSpaces(
+                            maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
+                        )
+                        if filtered != newValue { viewModel.nameEn = filtered }
+                    }
+                fieldErrorText(viewModel.validation.nameEn, emptyMessage: "Please enter restaurant name")
             }
             if viewModel.isIcelandicNameSelected {
                 pinkTextField(text: $viewModel.nameIs, autocapitalization: .words)
+                    .onChange(of: viewModel.nameIs) { _, newValue in
+                        let filtered = newValue.filteredToLettersAndSpaces(
+                            maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
+                        )
+                        if filtered != newValue { viewModel.nameIs = filtered }
+                    }
+                fieldErrorText(viewModel.validation.nameIs, emptyMessage: "Please enter restaurant name")
             }
         }
+    }
+
+    // MARK: - Location (address search, Google Places Autocomplete)
+
+    private var locationSection: some View {
+        VStack(alignment: .leading, spacing: SvSpacing.sm) {
+            fieldSection(heading: "Location") {
+                pinkTextField(text: $viewModel.address, autocapitalization: .words)
+                    .submitLabel(.search)
+                    .onSubmit { viewModel.searchAddressNow() }
+            }
+
+            if !viewModel.addressSuggestions.isEmpty {
+                addressSuggestionsList
+            }
+        }
+    }
+
+    private var addressSuggestionsList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(viewModel.addressSuggestions) { suggestion in
+                Button {
+                    viewModel.selectAddressSuggestion(suggestion)
+                } label: {
+                    Text(suggestion.description)
+                        .font(SvFont.timeValue)
+                        .foregroundStyle(Color.svOnBackground)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if suggestion.id != viewModel.addressSuggestions.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .fill(Color.white)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .stroke(Color.svDivider, lineWidth: 1)
+        )
     }
 
     // MARK: - Description (with language chips)
@@ -168,10 +243,40 @@ struct EditRestaurantScreen: View {
 
             if viewModel.isEnglishDescriptionSelected {
                 pinkMultilineField(text: $viewModel.descriptionEn)
+                fieldErrorText(viewModel.validation.descriptionEn, emptyMessage: "Please enter a description")
             }
             if viewModel.isIcelandicDescriptionSelected {
                 pinkMultilineField(text: $viewModel.descriptionIs)
+                fieldErrorText(viewModel.validation.descriptionIs, emptyMessage: "Please enter a description")
             }
+        }
+    }
+
+    private func saveImageData(_ data: Data) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        guard (try? data.write(to: url)) != nil else { return }
+        viewModel.addImage(url)
+    }
+
+    @ViewBuilder
+    private func fieldErrorText(_ error: ValidationError?, emptyMessage: LocalizedStringKey) -> some View {
+        if let key = errorKey(for: error, emptyMessage: emptyMessage) {
+            Text(key)
+                .font(.caption)
+                .foregroundStyle(Color.svError)
+        }
+    }
+
+    private func errorKey(for error: ValidationError?, emptyMessage: LocalizedStringKey) -> LocalizedStringKey? {
+        guard let error else { return nil }
+        switch error {
+        case .empty:            return emptyMessage
+        case .tooShort(let m):  return "Must be at least \(m) characters"
+        case .tooLong(let m):   return "Must be \(m) characters or fewer"
+        case .invalidFormat:    return "Please enter a valid value"
+        case .custom(let key):  return LocalizedStringKey(key)
         }
     }
 
@@ -261,7 +366,18 @@ struct EditRestaurantScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
-                    PhotosPicker(selection: $photoSelection, matching: .images) {
+                    Menu {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button {
+                                showCamera = true
+                            } label: {
+                                Label("Take Photo", systemImage: "camera")
+                            }
+                        }
+                        PhotosPicker(selection: $photoSelection, matching: .images) {
+                            Label("Choose from Library", systemImage: "photo.on.rectangle")
+                        }
+                    } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 24))
                             .foregroundStyle(Color.svPrimary)
@@ -322,6 +438,10 @@ struct EditRestaurantScreen: View {
                 .padding(.top, 6)
                 .padding(.trailing, 6)
             }
+
+            if let error = viewModel.validation.images {
+                fieldErrorText(error, emptyMessage: "Please add at least one image.")
+            }
         }
     }
 
@@ -333,10 +453,18 @@ struct EditRestaurantScreen: View {
                 .font(SvFont.label)
                 .foregroundStyle(Color.svOnBackground)
 
-            VStack(spacing: SvSpacing.xs) {
-                ForEach(Weekday.allCases) { day in
-                    openingHourRow(for: day)
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: SvSpacing.sm) {
+                    ForEach(Weekday.allCases) { day in
+                        openingHourRow(for: day)
+                    }
                 }
+            }
+
+            if let openingHoursError = viewModel.openingHoursError {
+                Text(openingHoursError)
+                    .font(SvFont.caption)
+                    .foregroundStyle(Color.svError)
             }
         }
     }
@@ -344,25 +472,29 @@ struct EditRestaurantScreen: View {
     @ViewBuilder
     private func openingHourRow(for day: Weekday) -> some View {
         let schedule = viewModel.openingHours[day] ?? EditDaySchedule(day: day)
+        let isOpen = !schedule.isClosed
         HStack(spacing: SvSpacing.sm) {
             Text(day.shortName)
                 .font(SvFont.caption)
                 .foregroundStyle(Color.svOnBackground)
                 .frame(width: 35, alignment: .leading)
+                .fixedSize()
 
-            if schedule.isClosed {
-                Text("Closed")
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svSecondary)
-                Spacer()
-            } else {
-                EditTimeChip(time: schedule.openTime) { viewModel.setOpenTime($0, for: day) }
-                Text("to")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.svSecondary)
-                EditTimeChip(time: schedule.closeTime) { viewModel.setCloseTime($0, for: day) }
-                Spacer()
+            EditTimeChip(time: schedule.openTime, isEnabled: isOpen) {
+                viewModel.setOpenTime($0, for: day)
             }
+            Text("to")
+                .font(SvFont.caption)
+                .foregroundStyle(Color.svSecondary)
+                .fixedSize()
+            EditTimeChip(time: schedule.closeTime, isEnabled: isOpen) {
+                viewModel.setCloseTime($0, for: day)
+            }
+
+            Text("Closed")
+                .font(SvFont.caption)
+                .foregroundStyle(Color.svSecondary)
+                .fixedSize()
 
             DayOpenToggle(isClosed: schedule.isClosed) {
                 viewModel.toggleDayOpen(day)
@@ -403,7 +535,7 @@ private struct DayOpenToggle: View {
         Button(action: onToggle) {
             ZStack {
                 Capsule()
-                    .fill(isClosed ? Color.svPrimary : Color(red: 0.35, green: 0.76, blue: 0.42))
+                    .fill(isClosed ? Color.svPrimary : Color.svDivider)
                 Circle()
                     .fill(Color.white)
                     .frame(width: thumbSize, height: thumbSize)
@@ -422,6 +554,7 @@ private struct DayOpenToggle: View {
 
 private struct EditTimeChip: View {
     let time: String
+    var isEnabled: Bool = true
     let onChange: (String) -> Void
     @State private var isPickerVisible = false
 
@@ -429,16 +562,17 @@ private struct EditTimeChip: View {
         Button {
             isPickerVisible = true
         } label: {
-            Text(time)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.svOnBackground)
-                .frame(width: 60, height: 30)
+            Text(isEnabled ? time : "–")
+                .font(SvFont.captionStrong)
+                .foregroundStyle(isEnabled ? Color.svOnBackground : Color.svSecondary)
+                .frame(width: 78, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color.svFieldBackground)
                 )
         }
         .buttonStyle(.plain)
+        .allowsHitTesting(isEnabled)
         .popover(isPresented: $isPickerVisible) {
             DatePicker(
                 "Select time",

@@ -3,16 +3,19 @@ import SwiftUI
 @MainActor
 @Observable
 final class EditRestaurantViewModel {
-    var nameEn: String = ""
-    var nameIs: String = ""
+    var nameEn: String = ""        { didSet { revalidateIfTouched() } }
+    var nameIs: String = ""        { didSet { revalidateIfTouched() } }
     /// Read-only — the update API has no `email` field, so this is display-only.
     private(set) var adminEmail: String = ""
     var phoneNumber: String = ""
-    var descriptionEn: String = ""
-    var descriptionIs: String = ""
+    var descriptionEn: String = "" { didSet { revalidateIfTouched() } }
+    var descriptionIs: String = "" { didSet { revalidateIfTouched() } }
     var address: String = ""
     var city: String = ""
     var country: String = ""
+    /// Google Places Autocomplete suggestions for the current `address` text — populated only
+    /// via `searchAddressNow()` (the keyboard's "Search" button), never live as the user types.
+    private(set) var addressSuggestions: [PlaceSuggestion] = []
     var website: String = ""
     var openingHours: [Weekday: EditDaySchedule] = [:]
     /// Newly picked local images to upload alongside the update — the API only accepts new
@@ -32,25 +35,26 @@ final class EditRestaurantViewModel {
     private(set) var isIcelandicDescriptionSelected = true
 
     private(set) var state: EditRestaurantUiState = .loading
+    private(set) var validation = EditRestaurantValidation()
+    private var hasAttemptedSave = false
 
     private var latitude: Double?
     private var longitude: Double?
+    private var lastSelectedAddress: String?
+    private var addressSearchTask: Task<Void, Never>?
 
     private let getProfileUseCase: GetRestaurantProfileUseCaseProtocol
     private let updateProfileUseCase: UpdateRestaurantProfileUseCaseProtocol
+    private let placesService: PlacesServiceProtocol
 
     init(
         getProfileUseCase: GetRestaurantProfileUseCaseProtocol,
-        updateProfileUseCase: UpdateRestaurantProfileUseCaseProtocol
+        updateProfileUseCase: UpdateRestaurantProfileUseCaseProtocol,
+        placesService: PlacesServiceProtocol
     ) {
         self.getProfileUseCase = getProfileUseCase
         self.updateProfileUseCase = updateProfileUseCase
-    }
-
-    var canSubmit: Bool {
-        !effectiveNameEn.isEmpty && !effectiveNameIs.isEmpty &&
-        !effectiveDescriptionEn.isEmpty && !effectiveDescriptionIs.isEmpty &&
-        !address.isEmpty && state != .saving
+        self.placesService = placesService
     }
 
     func onAppear() async {
@@ -68,26 +72,42 @@ final class EditRestaurantViewModel {
     func toggleEnglishNameSelected() {
         guard !(isEnglishNameSelected && !isIcelandicNameSelected) else { return }
         isEnglishNameSelected.toggle()
+        revalidateIfTouched()
     }
 
     func toggleIcelandicNameSelected() {
         guard !(isIcelandicNameSelected && !isEnglishNameSelected) else { return }
         isIcelandicNameSelected.toggle()
+        revalidateIfTouched()
     }
 
     // MARK: - Description language toggles
     func toggleEnglishDescriptionSelected() {
         guard !(isEnglishDescriptionSelected && !isIcelandicDescriptionSelected) else { return }
         isEnglishDescriptionSelected.toggle()
+        revalidateIfTouched()
     }
 
     func toggleIcelandicDescriptionSelected() {
         guard !(isIcelandicDescriptionSelected && !isEnglishDescriptionSelected) else { return }
         isIcelandicDescriptionSelected.toggle()
+        revalidateIfTouched()
     }
+
+    /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day — displayed
+    /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
+    private(set) var openingHoursError: String?
 
     func toggleDayOpen(_ day: Weekday) {
         let schedule = openingHours[day] ?? EditDaySchedule(day: day)
+        if !schedule.isClosed {
+            let openDayCount = Weekday.allCases.filter { !(openingHours[$0]?.isClosed ?? false) }.count
+            guard openDayCount > 1 else {
+                openingHoursError = "Please keep 1 day open"
+                return
+            }
+        }
+        openingHoursError = nil
         openingHours[day] = EditDaySchedule(
             day: day,
             openTime: schedule.openTime,
@@ -116,13 +136,61 @@ final class EditRestaurantViewModel {
         )
     }
 
+    // MARK: - Address autocomplete
+
+    /// User tapped a Places suggestion — replaces the typed text with the full formatted
+    /// address, clears the dropdown, and fetches that place's city/country/coordinate so they
+    /// reflect the address actually picked rather than what was previously on file.
+    func selectAddressSuggestion(_ suggestion: PlaceSuggestion) {
+        addressSearchTask?.cancel()
+        lastSelectedAddress = suggestion.description
+        address = suggestion.description
+        addressSuggestions = []
+        Task {
+            if let details = try? await placesService.placeDetails(placeID: suggestion.id) {
+                if let city = details.city { self.city = city }
+                if let country = details.country { self.country = country }
+                latitude = details.latitude
+                longitude = details.longitude
+            }
+            // Billed as part of the session that started with the autocomplete search —
+            // reset only now, after the Details call, so the next search starts fresh.
+            await placesService.resetSession()
+        }
+    }
+
+    /// Triggered only when the user taps the keyboard's "Search" button — no live search on
+    /// every keystroke.
+    func searchAddressNow() {
+        addressSearchTask?.cancel()
+        guard address != lastSelectedAddress else { return }
+        guard address.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 else {
+            addressSuggestions = []
+            return
+        }
+        let query = address
+        addressSearchTask = Task { [weak self] in
+            await self?.runAddressSearch(query)
+        }
+    }
+
+    private func runAddressSearch(_ query: String) async {
+        guard let suggestions = try? await placesService.autocomplete(query: query) else { return }
+        // The user may have kept typing (or cleared the field) while this request was in
+        // flight — only apply results that still match the current text.
+        guard !Task.isCancelled, query == address else { return }
+        addressSuggestions = suggestions
+    }
+
     func addImage(_ url: URL) {
         newImageRefs.append(url)
+        revalidateIfTouched()
     }
 
     func removeNewImage(at index: Int) {
         guard newImageRefs.indices.contains(index) else { return }
         newImageRefs.remove(at: index)
+        revalidateIfTouched()
     }
 
     /// Removes an already-uploaded photo from view only — the update API has no endpoint to
@@ -131,10 +199,14 @@ final class EditRestaurantViewModel {
     func removeExistingImage(at index: Int) {
         guard existingImageURLs.indices.contains(index) else { return }
         existingImageURLs.remove(at: index)
+        revalidateIfTouched()
     }
 
     func save() async {
-        guard canSubmit else { return }
+        hasAttemptedSave = true
+        revalidate()
+        guard validation.isValid else { return }
+
         state = .saving
         do throws(AppError) {
             try await updateProfileUseCase.execute(params: currentParams())
@@ -142,6 +214,33 @@ final class EditRestaurantViewModel {
         } catch {
             state = .error(error.displayMessage)
         }
+    }
+
+    private func revalidateIfTouched() {
+        guard hasAttemptedSave else { return }
+        revalidate()
+    }
+
+    private func revalidate() {
+        validation = EditRestaurantValidation(
+            nameEn: Self.validateRestaurantNameField(effectiveNameEn),
+            nameIs: Self.validateRestaurantNameField(effectiveNameIs),
+            descriptionEn: effectiveDescriptionEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .empty : nil,
+            descriptionIs: effectiveDescriptionIs.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .empty : nil,
+            images: (existingImageURLs.count + newImageRefs.count) == 0
+                ? .custom(messageKey: "Please add at least one image.") : nil
+        )
+    }
+
+    /// Same minimum length as `ValidateCredentialsUseCase.restaurantNameMinLength` (Register
+    /// Restaurant) — kept in sync so both screens enforce an identical restaurant-name policy.
+    private static func validateRestaurantNameField(_ name: String) -> ValidationError? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return .empty }
+        if trimmed.count < ValidateCredentialsUseCase.restaurantNameMinLength {
+            return .tooShort(min: ValidateCredentialsUseCase.restaurantNameMinLength)
+        }
+        return nil
     }
 
     /// The English name when English is selected, otherwise mirrors the Icelandic name so an
@@ -215,7 +314,8 @@ extension EditRestaurantViewModel {
     static func previewInstance(state: EditRestaurantUiState = .idle) -> EditRestaurantViewModel {
         let vm = EditRestaurantViewModel(
             getProfileUseCase: FakeGetRestaurantProfileUseCase(),
-            updateProfileUseCase: FakeUpdateRestaurantProfileUseCase()
+            updateProfileUseCase: FakeUpdateRestaurantProfileUseCase(),
+            placesService: FakePlacesService()
         )
         vm.apply(FakeGetRestaurantProfileUseCase.sample)
         vm.state = state
@@ -245,4 +345,12 @@ private struct FakeGetRestaurantProfileUseCase: GetRestaurantProfileUseCaseProto
 
 private struct FakeUpdateRestaurantProfileUseCase: UpdateRestaurantProfileUseCaseProtocol {
     func execute(params: ProfileUpdateParams) async throws(AppError) {}
+}
+
+private struct FakePlacesService: PlacesServiceProtocol {
+    func autocomplete(query: String) async throws(AppError) -> [PlaceSuggestion] { [] }
+    func placeDetails(placeID: String) async throws(AppError) -> PlaceDetails {
+        PlaceDetails(formattedAddress: "Laugavegur 1", city: "Reykjavik", country: "Iceland", latitude: 64.1466, longitude: -21.9426)
+    }
+    func resetSession() async {}
 }

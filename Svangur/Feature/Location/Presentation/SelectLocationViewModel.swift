@@ -11,28 +11,23 @@ final class SelectLocationViewModel {
     private(set) var state: SelectLocationUiState = .idle
     private(set) var recentSearches: [String] = []
 
-    private var searchTask: Task<Void, Never>?
+    /// `nonisolated(unsafe)`: only ever mutated from `@MainActor` methods, except for the
+    /// `cancel()` call in `deinit` — see `RegisterRestaurantViewModel.addressSearchTask` for
+    /// the same pattern and rationale.
+    nonisolated(unsafe) private var searchTask: Task<Void, Never>?
 
     private static let recentSearchesKey = "recent_location_searches"
     private static let maxRecentSearches = 10
 
-    // Mock catalogue until a Places backend is wired in. The names match the
-    // Figma example data plus a handful of extras so search returns something.
-    private static let mockLocations: [String] = [
-        "Bistro 21",
-        "Urban Bite",
-        "Eat Street",
-        "Napoli Crust",
-        "Firewood Pizza Co.",
-        "Sweet Bites",
-        "Noodle House",
-        "Taco Town",
-        "Pizza Palace",
-        "Burger Joint"
-    ]
+    private let placesService: PlacesServiceProtocol
 
-    init() {
+    init(placesService: PlacesServiceProtocol) {
+        self.placesService = placesService
         self.recentSearches = Self.loadRecentSearches()
+    }
+
+    deinit {
+        searchTask?.cancel()
     }
 
     // MARK: - Actions
@@ -43,6 +38,10 @@ final class SelectLocationViewModel {
 
     func selectResult(_ result: SelectLocationResultUi) {
         addToRecentSearches(result.displayName)
+        // Billed as part of the session that started with the autocomplete search — reset only
+        // now, once the picked suggestion is on its way to `ConfirmLocationViewModel`, so the
+        // next search starts a fresh Places session.
+        Task { await placesService.resetSession() }
     }
 
     func clearRecentSearches() {
@@ -63,18 +62,26 @@ final class SelectLocationViewModel {
 
         guard trimmed.count >= 2 else { return }
 
-        searchTask = Task {
+        state = .searching
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            performSearch(trimmed)
+            await self?.performSearch(trimmed)
         }
     }
 
-    private func performSearch(_ searchText: String) {
-        let lowered = searchText.lowercased()
-        let matches = Self.mockLocations.filter { $0.lowercased().contains(lowered) }
-        let results = matches.map { SelectLocationResultUi(id: $0, displayName: $0) }
-        state = results.isEmpty ? .noResults(query: searchText) : .results(results)
+    private func performSearch(_ searchText: String) async {
+        do throws(AppError) {
+            let suggestions = try await placesService.autocomplete(query: searchText)
+            // The user may have kept typing (or cleared the field) while this request was in
+            // flight — only apply results that still match the current text.
+            guard !Task.isCancelled, searchText == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            let results = suggestions.map { SelectLocationResultUi(id: $0.id, displayName: $0.description) }
+            state = results.isEmpty ? .noResults(query: searchText) : .results(results)
+        } catch {
+            guard !Task.isCancelled, searchText == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            state = .error(message: error.displayMessage)
+        }
     }
 
     // MARK: - Recents
@@ -107,10 +114,26 @@ extension SelectLocationViewModel {
         state: SelectLocationUiState = .idle,
         recentSearches: [String] = ["Bistro 21", "Urban Bite", "Eat Street"]
     ) -> SelectLocationViewModel {
-        let vm = SelectLocationViewModel()
+        let vm = SelectLocationViewModel(placesService: FakePlacesService())
         vm.query = query
         vm.state = state
         vm.recentSearches = recentSearches
         return vm
     }
+}
+
+private struct FakePlacesService: PlacesServiceProtocol {
+    func autocomplete(query: String) async throws(AppError) -> [PlaceSuggestion] {
+        [PlaceSuggestion(id: "1", description: "\(query), Reykjavik, Iceland")]
+    }
+    func placeDetails(placeID: String) async throws(AppError) -> PlaceDetails {
+        PlaceDetails(
+            formattedAddress: "Laugavegur 1, 101 Reykjavik, Iceland",
+            city: "Reykjavik",
+            country: "Iceland",
+            latitude: 64.1466,
+            longitude: -21.9426
+        )
+    }
+    func resetSession() async {}
 }

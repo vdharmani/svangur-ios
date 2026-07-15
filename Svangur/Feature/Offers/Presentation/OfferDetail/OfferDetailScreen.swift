@@ -98,6 +98,7 @@ struct OfferDetailScreen: View {
         } message: {
             Text("This action cannot be undone.")
         }
+        .svErrorBanner(viewModel.actionErrorMessage)
         .task { await viewModel.onAppear() }
     }
 

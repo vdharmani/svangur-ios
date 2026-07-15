@@ -25,13 +25,16 @@ extension FeedItemDTO {
             validTimeEnd: validTimeEnd,
             validDays: mapValidDays(validDays),
             heroImageUrl: imageUrl,
+            imageUrls: images.map(\.url),
             address: restaurant?.address,
             latitude: restaurant?.latitude,
             longitude: restaurant?.longitude,
             distanceKm: restaurant?.distanceKm,
             isOpenNow: restaurant?.isOpenNow,
             opensAt: restaurant?.opensAt,
-            rating: nil
+            rating: nil,
+            views: stats?.views ?? 0,
+            clicks: stats?.clicks ?? 0
         )
     }
 }

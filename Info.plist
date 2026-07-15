@@ -12,7 +12,9 @@
 		<string>Poppins-Bold.ttf</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Svangur uses your location to set your restaurant's map position during registration.</string>
+	<string>Svangur uses your location to show deals near you and to set your restaurant's map position during registration.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Svangur needs camera access to take photos of your restaurant.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

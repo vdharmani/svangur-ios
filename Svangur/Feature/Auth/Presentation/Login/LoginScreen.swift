@@ -36,6 +36,7 @@ struct LoginScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbarVisibility(.hidden, for: .navigationBar)
+        .svErrorBanner(loginErrorMessage)
         .onChange(of: viewModel.effect) { _, effect in
             guard case .loggedIn(let token) = effect else { return }
             session.adopt(token)
@@ -78,6 +79,14 @@ struct LoginScreen: View {
             .padding(.top, 8)
         }
     }
+
+    /// Server/API errors (e.g. a failed login attempt) surface as a banner over the pink
+    /// header — distinct from per-field validation errors, which stay inline under each field.
+    private var loginErrorMessage: String? {
+        guard case .error(let message) = viewModel.loadState else { return nil }
+        return message
+    }
+
     // MARK: - Form
 
     private var form: some View {
@@ -156,13 +165,6 @@ struct LoginScreen: View {
                 }
             }
             .padding(.top, 17)
-
-            if case .error(let message) = viewModel.loadState {
-                Text(message)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svError)
-                    .padding(.top, 8)
-            }
 
             SvPrimaryButton(
                 title: "Login",

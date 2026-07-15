@@ -14,7 +14,7 @@ enum DealEndpoint: Endpoint {
         deviceId: String? = nil
     )
     case listCategories(lang: String? = nil)
-    case listDiscountOptions
+    case listDiscountOptions(lang: String? = nil)
     case getDeal(
         id: String,
         lang: String? = nil,
@@ -70,8 +70,9 @@ enum DealEndpoint: Endpoint {
             guard let lang else { return nil }
             return [URLQueryItem(name: "lang", value: lang)]
 
-        case .listDiscountOptions:
-            return nil
+        case .listDiscountOptions(let lang):
+            guard let lang else { return nil }
+            return [URLQueryItem(name: "lang", value: lang)]
 
         case .getDeal(_, let lang, let lat, let lng, let deviceId):
             var items: [URLQueryItem] = []

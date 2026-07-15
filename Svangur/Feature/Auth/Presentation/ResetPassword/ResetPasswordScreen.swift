@@ -38,6 +38,14 @@ struct ResetPasswordScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .sensoryFeedback(.success, trigger: viewModel.state == .success)
         .task { focusedField = .newPassword }
+        .svErrorBanner(resetErrorMessage)
+    }
+
+    /// Server/API errors (e.g. a failed reset attempt) surface as a banner over the top of the
+    /// screen — distinct from per-field validation errors, which stay inline under each field.
+    private var resetErrorMessage: String? {
+        guard case .error(let message) = viewModel.state else { return nil }
+        return message
     }
 
     // MARK: - Form
@@ -95,13 +103,6 @@ struct ResetPasswordScreen: View {
             .submitLabel(.go)
             .onSubmit { Task { await viewModel.submit() } }
             .padding(.top, 16)
-
-            if case .error(let message) = viewModel.state {
-                Text(message)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svError)
-                    .padding(.top, 8)
-            }
 
             SvPrimaryButton(
                 title: "Submit",

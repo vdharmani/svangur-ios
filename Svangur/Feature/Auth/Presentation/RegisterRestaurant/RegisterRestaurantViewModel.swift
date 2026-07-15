@@ -13,7 +13,7 @@ final class RegisterRestaurantViewModel {
     var phoneNumber: String = ""    { didSet { revalidateIfTouched() } }
     var description: String = ""    { didSet { revalidateIfTouched() } }
     var descriptionIcelandic: String = "" { didSet { revalidateIfTouched() } }
-    var address: String = ""        { didSet { revalidateIfTouched(); scheduleAddressSearch() } }
+    var address: String = ""        { didSet { revalidateIfTouched() } }
     var city: String = ""           { didSet { revalidateIfTouched() } }
     /// No static fallback on purpose — only ever set from the live reverse-geocode result in
     /// `onAppear()`. Stays empty (and the server will reject the submission) if location/geocoding
@@ -156,7 +156,9 @@ final class RegisterRestaurantViewModel {
         }
     }
 
-    private func scheduleAddressSearch() {
+    /// Triggered only when the user taps the keyboard's "Search" button — no longer searches
+    /// live on every keystroke, so a lookup only fires on explicit intent.
+    func searchAddressNow() {
         addressSearchTask?.cancel()
         guard address != lastSelectedAddress else { return }
         guard address.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 else {
@@ -165,9 +167,7 @@ final class RegisterRestaurantViewModel {
         }
         let query = address
         addressSearchTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, let self else { return }
-            await self.runAddressSearch(query)
+            await self?.runAddressSearch(query)
         }
     }
 
@@ -180,8 +180,20 @@ final class RegisterRestaurantViewModel {
     }
 
     // MARK: - Schedule mutators
+    /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day — displayed
+    /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
+    private(set) var openingHoursError: String?
+
     func toggleDayOpen(_ day: Weekday) {
         var schedule = openingHours[day] ?? .standardOpen
+        if schedule.isOpen {
+            let openDayCount = Weekday.allCases.filter { (openingHours[$0] ?? .standardOpen).isOpen }.count
+            guard openDayCount > 1 else {
+                openingHoursError = "Please keep 1 day open"
+                return
+            }
+        }
+        openingHoursError = nil
         schedule.isOpen.toggle()
         openingHours[day] = schedule
     }
@@ -199,6 +211,16 @@ final class RegisterRestaurantViewModel {
     }
 
     // MARK: - Image / document mutators
+    private(set) var imageSizeErrorMessage: String?
+
+    func clearImageSizeError() {
+        imageSizeErrorMessage = nil
+    }
+
+    func flagOversizedImage() {
+        imageSizeErrorMessage = "Restaurants pictures size should be less than 5 MB"
+    }
+
     func addImage(_ url: URL) {
         guard imageRefs.count < ValidateCredentialsUseCase.maxImageCount else { return }
         imageRefs.append(url)
@@ -219,13 +241,14 @@ final class RegisterRestaurantViewModel {
     /// Best-effort auto-fill from the device's current location — triggered from the screen's
     /// `.task { }` on appear, never from `init`. Only fills fields the user hasn't already
     /// typed into, so it never clobbers a manual edit or a re-appear after editing.
+    /// Deliberately does NOT fill `address` — the user always types/searches that themselves,
+    /// since a device-location guess is often wrong for a business address.
     func onAppear() async {
         guard let coordinate = try? await locationService.currentLocation() else { return }
         capturedLatitude = coordinate.latitude
         capturedLongitude = coordinate.longitude
 
         guard let placemark = try? await locationService.reverseGeocode(coordinate) else { return }
-        if address.isEmpty, let value = placemark.address { address = value }
         if city.isEmpty, let value = placemark.city { city = value }
         if let value = placemark.country { country = value }
     }
@@ -332,9 +355,10 @@ final class RegisterRestaurantViewModel {
 
     private static func defaultOpeningHours() -> [Weekday: DaySchedule] {
         Weekday.allCases.reduce(into: [Weekday: DaySchedule]()) { dict, day in
-            dict[day] = day == .sunday ? .closed : .standardOpen
+            dict[day] = .standardOpen
         }
     }
+
 }
 
 // MARK: - Preview Factory

@@ -23,10 +23,6 @@ final class ChangePasswordViewModel {
         self.validate = validate
     }
 
-    var canSubmit: Bool {
-        !currentPassword.isEmpty && !newPassword.isEmpty && !confirmPassword.isEmpty && state != .submitting
-    }
-
     func submit() async {
         hasAttemptedSubmit = true
         revalidate()

@@ -74,16 +74,19 @@ struct ChangePasswordValidation: Sendable, Equatable {
 
 final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Sendable {
     static let passwordMinLength = 8
-    static let restaurantNameMinLength = 2
+    static let restaurantNameMinLength = 3
+    static let restaurantNameMaxLength = 50
     static let descriptionMinLength = 10
     static let descriptionMaxLength = 500
     static let phoneMinLength = 7
+    static let phoneMaxLength = 15
     static let maxImageCount = 5
+    static let maxImageSizeBytes = 5 * 1024 * 1024
 
     func validateLogin(email: String, password: String) -> CredentialsValidation {
         let emailError: ValidationError? = switch validateEmailFormat(email) {
         case .empty:         .custom(messageKey: "Please enter email address")
-        case .invalidFormat: .custom(messageKey: "Please enter a valid email address")
+        case .invalidFormat: .custom(messageKey: "Please enter valid email address")
         case let other:      other
         }
 
@@ -145,31 +148,57 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
     func validateChangePassword(current: String, new: String, confirm: String) -> ChangePasswordValidation {
         ChangePasswordValidation(
             currentPassword: current.isEmpty ? .empty : nil,
-            newPassword: validatePasswordStrength(new),
+            newPassword: validateNewPasswordForChange(new, current: current),
             confirmPassword: validateConfirmPassword(confirm, matches: new)
         )
     }
 
-    private func validateConfirmPassword(_ confirm: String, matches password: String) -> ValidationError? {
-        if confirm.isEmpty { return .empty }
-        if confirm != password { return .custom(messageKey: "Passwords do not match.") }
+    /// The new password must meet the same strength policy as any other new password, and must
+    /// differ from the current one — checked only once both are non-empty, so it never masks
+    /// the plain "empty"/strength errors.
+    private func validateNewPasswordForChange(_ new: String, current: String) -> ValidationError? {
+        if let strengthError = validatePasswordStrength(new) { return strengthError }
+        if !current.isEmpty, new == current {
+            return .custom(messageKey:
+                "New password cannot be the same as your current password. Please choose a different one."
+            )
+        }
         return nil
     }
+
+    private func validateConfirmPassword(_ confirm: String, matches password: String) -> ValidationError? {
+        if confirm.isEmpty { return .empty }
+        if confirm != password {
+            return .custom(messageKey: "New password and confirm new password do not match")
+        }
+        return nil
+    }
+
+    /// Requires a non-empty local part, and a domain made of one or more non-empty
+    /// `label.` segments followed by a letters-only TLD (2+ chars) — rejects things the old
+    /// "just contains a dot somewhere" check let through, like `user@.com` or `user@com.`.
+    private static let emailPattern = /^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$/
 
     func validateEmailFormat(_ email: String) -> ValidationError? {
         let trimmed = email.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .empty }
-        // Minimal RFC-ish check: one @, at least one . in the domain.
-        guard let at = trimmed.firstIndex(of: "@") else { return .invalidFormat }
-        let domain = trimmed[trimmed.index(after: at)...]
-        if domain.isEmpty || !domain.contains(".") { return .invalidFormat }
+        guard trimmed.wholeMatch(of: Self.emailPattern) != nil else { return .invalidFormat }
         return nil
     }
 
     private func validatePasswordStrength(_ password: String) -> ValidationError? {
         if password.isEmpty { return .empty }
-        if password.count < Self.passwordMinLength {
-            return .tooShort(min: Self.passwordMinLength)
+
+        let hasUppercase = password.contains { $0.isUppercase }
+        let hasLowercase = password.contains { $0.isLowercase }
+        let hasSpecialCharacter = password.contains { $0.isSymbol || $0.isPunctuation }
+        let hasSpace = password.contains { $0.isWhitespace }
+
+        guard password.count >= Self.passwordMinLength,
+              hasUppercase, hasLowercase, hasSpecialCharacter, !hasSpace else {
+            return .custom(messageKey:
+                "Password must be at least 8 characters long with uppercase, lowercase, special character, and no spaces"
+            )
         }
         return nil
     }
@@ -198,8 +227,8 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
     func validatePhoneNumber(_ phone: String) -> ValidationError? {
         let digits = phone.filter(\.isNumber)
         if digits.isEmpty { return .empty }
-        if digits.count < Self.phoneMinLength {
-            return .tooShort(min: Self.phoneMinLength)
+        if digits.count < Self.phoneMinLength || digits.count > Self.phoneMaxLength {
+            return .custom(messageKey: "Phone number should be between 7 to 15 digits")
         }
         return nil
     }

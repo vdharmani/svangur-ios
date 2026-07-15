@@ -169,9 +169,11 @@ struct FeedItemDTO: Codable, Sendable {
     let description: String?
     let discountLabel: String?
     let imageUrl: String?
+    let images: [OfferDetailImageDTO]
     let validDays: [String]
     let validTimeStart: String?
     let validTimeEnd: String?
+    let stats: OfferStatsDTO?
     let restaurant: FeedRestaurantDTO?
 
     enum CodingKeys: String, CodingKey {
@@ -180,9 +182,11 @@ struct FeedItemDTO: Codable, Sendable {
         case description
         case discountLabel = "discount_label"
         case imageUrl = "image_url"
+        case images
         case validDays = "valid_days"
         case validTimeStart = "valid_time_start"
         case validTimeEnd = "valid_time_end"
+        case stats
         case restaurant
     }
 
@@ -193,9 +197,11 @@ struct FeedItemDTO: Codable, Sendable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         discountLabel = try container.decodeIfPresent(String.self, forKey: .discountLabel)
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        images = try container.decodeIfPresent([OfferDetailImageDTO].self, forKey: .images) ?? []
         validDays = try container.decodeIfPresent([String].self, forKey: .validDays) ?? []
         validTimeStart = try container.decodeIfPresent(String.self, forKey: .validTimeStart)
         validTimeEnd = try container.decodeIfPresent(String.self, forKey: .validTimeEnd)
+        stats = try container.decodeIfPresent(OfferStatsDTO.self, forKey: .stats)
         restaurant = try container.decodeIfPresent(FeedRestaurantDTO.self, forKey: .restaurant)
     }
 }

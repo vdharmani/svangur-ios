@@ -35,6 +35,14 @@ struct ForgotPasswordScreen: View {
         .toolbarVisibility(.hidden, for: .navigationBar)
         .sensoryFeedback(.success, trigger: viewModel.state == .sent)
         .task { emailFocused = true }
+        .svErrorBanner(forgotPasswordErrorMessage)
+    }
+
+    /// Server/API errors (e.g. a failed reset request) surface as a banner over the top of the
+    /// screen — distinct from per-field validation errors, which stay inline under each field.
+    private var forgotPasswordErrorMessage: String? {
+        guard case .error(let message) = viewModel.state else { return nil }
+        return message
     }
 
     // MARK: - Form
@@ -77,13 +85,6 @@ struct ForgotPasswordScreen: View {
             .submitLabel(.send)
             .onSubmit { Task { await viewModel.submit() } }
             .padding(.top, 16)
-
-            if case .error(let message) = viewModel.state {
-                Text(message)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svError)
-                    .padding(.top, 8)
-            }
 
             SvPrimaryButton(
                 title: "Submit",
@@ -146,34 +147,42 @@ struct ForgotPasswordScreen: View {
         text: Binding<String>,
         errorKey: LocalizedStringKey?
     ) -> some View {
-        HStack(spacing: 8) {
-            let styledPrompt = Text(placeholder)
-                .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
-            TextField("", text: text, prompt: styledPrompt)
-                .font(.custom("Poppins-Regular", size: 15, relativeTo: .subheadline))
-                .foregroundStyle(Color(red: 0.067, green: 0.067, blue: 0.067))
-                .keyboardType(.emailAddress)
-                .textContentType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                let styledPrompt = Text(placeholder)
+                    .foregroundStyle(Color(red: 0.361, green: 0.361, blue: 0.361))
+                TextField("", text: text, prompt: styledPrompt)
+                    .font(.custom("Poppins-Regular", size: 15, relativeTo: .subheadline))
+                    .foregroundStyle(Color(red: 0.067, green: 0.067, blue: 0.067))
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: SvSpacing.inputHeight)
+            .background(
+                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                    .fill(Color.svPrimary.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                    .stroke(errorKey == nil ? Color.svPrimary : Color.svError, lineWidth: 1)
+            )
+
+            if let errorKey {
+                Text(errorKey)
+                    .font(.caption)
+                    .foregroundStyle(Color.svError)
+            }
         }
-        .padding(.horizontal, 18)
-        .frame(height: SvSpacing.inputHeight)
-        .background(
-            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                .fill(Color.svPrimary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                .stroke(Color.svPrimary, lineWidth: 1)
-        )
     }
 
     private func errorKey(for error: ValidationError?) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
-        case .empty:         return "Please enter your email address"
-        case .invalidFormat: return "Please enter a valid email address"
+        case .empty:         return "Please enter email address"
+        case .invalidFormat: return "Please enter valid email address"
         default:             return "Please enter a valid value"
         }
     }

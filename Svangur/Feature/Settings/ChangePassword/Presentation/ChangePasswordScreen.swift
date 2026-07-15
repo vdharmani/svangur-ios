@@ -38,6 +38,14 @@ struct ChangePasswordScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .sensoryFeedback(.success, trigger: viewModel.state == .success)
         .task { focusedField = .currentPassword }
+        .svErrorBanner(changePasswordErrorMessage)
+    }
+
+    /// Server/API errors (e.g. wrong current password) surface as a banner over the top of the
+    /// screen — distinct from per-field validation errors, which stay inline under each field.
+    private var changePasswordErrorMessage: String? {
+        guard case .error(let message) = viewModel.state else { return nil }
+        return message
     }
 
     // MARK: - Form
@@ -78,7 +86,7 @@ struct ChangePasswordScreen: View {
             .onSubmit { focusedField = .newPassword }
             .padding(.top, 16)
 
-            if let key = errorKey(for: viewModel.validation.currentPassword) {
+            if let key = errorKey(for: viewModel.validation.currentPassword, emptyMessage: "Please enter current password") {
                 Text(key)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svError)
@@ -100,7 +108,7 @@ struct ChangePasswordScreen: View {
             .onSubmit { focusedField = .confirmPassword }
             .padding(.top, 16)
 
-            if let key = errorKey(for: viewModel.validation.newPassword) {
+            if let key = errorKey(for: viewModel.validation.newPassword, emptyMessage: "Please enter new password") {
                 Text(key)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svError)
@@ -122,24 +130,16 @@ struct ChangePasswordScreen: View {
             .onSubmit { Task { await viewModel.submit() } }
             .padding(.top, 16)
 
-            if let key = errorKey(for: viewModel.validation.confirmPassword) {
+            if let key = errorKey(for: viewModel.validation.confirmPassword, emptyMessage: "Please enter confirm password") {
                 Text(key)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svError)
                     .padding(.top, 6)
             }
 
-            if case .error(let message) = viewModel.state {
-                Text(message)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svError)
-                    .padding(.top, 8)
-            }
-
             SvPrimaryButton(
                 title: "Update Password",
-                isLoading: viewModel.state == .submitting,
-                isEnabled: viewModel.canSubmit
+                isLoading: viewModel.state == .submitting
             ) {
                 Task { await viewModel.submit() }
             }
@@ -226,10 +226,10 @@ struct ChangePasswordScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func errorKey(for error: ValidationError?) -> LocalizedStringKey? {
+    private func errorKey(for error: ValidationError?, emptyMessage: LocalizedStringKey) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
-        case .empty:           return "This field is required"
+        case .empty:           return emptyMessage
         case .tooShort(let m): return "Must be at least \(m) characters"
         case .tooLong(let m):  return "Must be \(m) characters or fewer"
         case .invalidFormat:   return "Please enter a valid value"

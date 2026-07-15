@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct RegisterRestaurantScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -10,6 +11,7 @@ struct RegisterRestaurantScreen: View {
     
     @FocusState private var focusedField: Field?
     @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var showCamera = false
     @State private var showDocumentPicker = false
     @State private var currentStep: RegistrationStep = .basicInfo
     @State private var isPasswordVisible = false
@@ -56,6 +58,12 @@ struct RegisterRestaurantScreen: View {
         .onChange(of: photoSelection) { _, items in
             Task { await loadSelectedPhotos(items) }
         }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera) { image in
+                handleCapturedImage(image)
+            }
+            .ignoresSafeArea()
+        }
         .overlay {
             if viewModel.state == .submitted {
                 SvConfirmationDialog(
@@ -74,8 +82,16 @@ struct RegisterRestaurantScreen: View {
         .task {
             await viewModel.onAppear()
         }
+        .svErrorBanner(registerErrorMessage)
     }
-    
+
+    /// Server/API errors (e.g. a failed submission) surface as a banner over the top of the
+    /// screen — distinct from per-field validation errors, which stay inline under each field.
+    private var registerErrorMessage: String? {
+        guard case .error(let message) = viewModel.state else { return nil }
+        return message
+    }
+
     // MARK: - Form
     
     private var form: some View {
@@ -111,7 +127,7 @@ struct RegisterRestaurantScreen: View {
                   placeholder: "Enter email address",
                   text: $viewModel.email,
                   error: viewModel.validation.email,
-                  emptyMessage: "Please enter email address.",
+                  emptyMessage: "Please enter email address",
                   keyboard: .emailAddress,
                   capitalization: .never,
                   contentType: .emailAddress,
@@ -154,6 +170,10 @@ struct RegisterRestaurantScreen: View {
                   contentType: .telephoneNumber,
                   field: .phone,
                   next: viewModel.isEnglishDescriptionSelected ? .description : .descriptionIcelandic)
+            .onChange(of: viewModel.phoneNumber) { _, newValue in
+                let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
+                if clamped != newValue { viewModel.phoneNumber = clamped }
+            }
 
         descriptionSection
 
@@ -179,7 +199,9 @@ struct RegisterRestaurantScreen: View {
                   capitalization: .words,
                   contentType: .streetAddressLine1,
                   field: .address,
-                  next: nil)
+                  next: nil,
+                  submitLabel: .search,
+                  onSubmitAction: { viewModel.searchAddressNow() })
 
         if !viewModel.addressSuggestions.isEmpty {
             addressSuggestionsList
@@ -188,14 +210,7 @@ struct RegisterRestaurantScreen: View {
         openingHoursSection
 
         documentSection
-        
-        if case .error(let message) = viewModel.state {
-            Text(message)
-                .font(SvFont.caption)
-                .foregroundStyle(Color.svError)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        
+
         SvPrimaryButton(
             title: "Submit for Approval",
             isLoading: viewModel.state == .submitting
@@ -260,9 +275,20 @@ struct RegisterRestaurantScreen: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
                     if viewModel.imageRefs.count < ValidateCredentialsUseCase.maxImageCount {
-                        PhotosPicker(selection: $photoSelection,
-                                     maxSelectionCount: ValidateCredentialsUseCase.maxImageCount - viewModel.imageRefs.count,
-                                     matching: .images) {
+                        Menu {
+                            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                                Button {
+                                    showCamera = true
+                                } label: {
+                                    Label("Take Photo", systemImage: "camera")
+                                }
+                            }
+                            PhotosPicker(selection: $photoSelection,
+                                         maxSelectionCount: ValidateCredentialsUseCase.maxImageCount - viewModel.imageRefs.count,
+                                         matching: .images) {
+                                Label("Choose from Library", systemImage: "photo.on.rectangle")
+                            }
+                        } label: {
                             Image("AddImages")
                                 .resizable()
                                 .scaledToFit()
@@ -272,7 +298,7 @@ struct RegisterRestaurantScreen: View {
                                         .fill(Color.svImagePlaceholder)
                                 )
                         }
-                                     .accessibilityLabel("Add restaurant image")
+                        .accessibilityLabel("Add restaurant image")
                     }
                     ForEach(Array(viewModel.imageRefs.enumerated()), id: \.offset) { index, url in
                         ZStack(alignment: .topTrailing) {
@@ -311,9 +337,15 @@ struct RegisterRestaurantScreen: View {
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svError)
             }
+
+            if let sizeError = viewModel.imageSizeErrorMessage {
+                Text(sizeError)
+                    .font(SvFont.caption)
+                    .foregroundStyle(Color.svError)
+            }
         }
     }
-    
+
     // MARK: - Restaurant Name section (with language chips)
     
     private var restaurantNameSection: some View {
@@ -344,6 +376,12 @@ struct RegisterRestaurantScreen: View {
                     .padding(.horizontal, 18)
                     .frame(height: SvSpacing.inputHeight)
                     .background(fieldBackground)
+                    .onChange(of: viewModel.restaurantName) { _, newValue in
+                        let filtered = newValue.filteredToLettersAndSpaces(
+                            maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
+                        )
+                        if filtered != newValue { viewModel.restaurantName = filtered }
+                    }
 
                 if let error = viewModel.validation.restaurantName,
                    let key = errorKey(for: error, emptyMessage: "Please enter a name.") {
@@ -365,6 +403,12 @@ struct RegisterRestaurantScreen: View {
                     .padding(.horizontal, 18)
                     .frame(height: SvSpacing.inputHeight)
                     .background(fieldBackground)
+                    .onChange(of: viewModel.restaurantNameIcelandic) { _, newValue in
+                        let filtered = newValue.filteredToLettersAndSpaces(
+                            maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
+                        )
+                        if filtered != newValue { viewModel.restaurantNameIcelandic = filtered }
+                    }
 
                 if let error = viewModel.validation.restaurantNameIcelandic,
                    let key = errorKey(for: error, emptyMessage: "Please enter a name.") {
@@ -508,14 +552,22 @@ struct RegisterRestaurantScreen: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.svOnBackground)
             
-            VStack(spacing: 8) {
-                ForEach(Weekday.allCases) { day in
-                    openingHourRow(for: day)
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: 8) {
+                    ForEach(Weekday.allCases) { day in
+                        openingHourRow(for: day)
+                    }
                 }
+            }
+
+            if let openingHoursError = viewModel.openingHoursError {
+                Text(openingHoursError)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.svError)
             }
         }
     }
-    
+
     @ViewBuilder
     private func openingHourRow(for day: Weekday) -> some View {
         let schedule = viewModel.openingHours[day] ?? .standardOpen
@@ -524,25 +576,26 @@ struct RegisterRestaurantScreen: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.svOnBackground)
                 .frame(width: 35, alignment: .leading)
+                .fixedSize()
 
             TimeChip(time: schedule.openTime, isEnabled: schedule.isOpen) { newTime in
                 viewModel.setOpenTime(newTime, for: day)
             }
-            
+
             Text("to")
                 .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(Color.svSecondary)
-            
+                .fixedSize()
+
             TimeChip(time: schedule.closeTime, isEnabled: schedule.isOpen) { newTime in
                 viewModel.setCloseTime(newTime, for: day)
             }
-            
-            Spacer()
-            
+
             Text("Closed")
                 .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(Color.svSecondary)
-            
+                .fixedSize()
+
             SvCompactToggle(isOn: Binding(
                 get: { !schedule.isOpen },
                 set: { _ in viewModel.toggleDayOpen(day) }
@@ -626,7 +679,9 @@ struct RegisterRestaurantScreen: View {
         field: Field,
         next: Field?,
         isSecure: Bool = false,
-        isRevealed: Binding<Bool>? = nil
+        isRevealed: Binding<Bool>? = nil,
+        submitLabel: SubmitLabel? = nil,
+        onSubmitAction: (() -> Void)? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: SvSpacing.sm) {
             Text(label)
@@ -648,8 +703,14 @@ struct RegisterRestaurantScreen: View {
                 .textContentType(contentType)
                 .autocorrectionDisabled(true)
                 .focused($focusedField, equals: field)
-                .submitLabel(next == nil ? .done : .next)
-                .onSubmit { focusedField = next }
+                .submitLabel(submitLabel ?? (next == nil ? .done : .next))
+                .onSubmit {
+                    if let onSubmitAction {
+                        onSubmitAction()
+                    } else {
+                        focusedField = next
+                    }
+                }
 
                 if isSecure, let isRevealed {
                     Button {
@@ -686,7 +747,7 @@ struct RegisterRestaurantScreen: View {
         case .empty:            return emptyMessage
         case .tooShort(let m):  return "Must be at least \(m) characters"
         case .tooLong(let m):   return "Must be \(m) characters or fewer"
-        case .invalidFormat:    return "Please enter a valid email address."
+        case .invalidFormat:    return "Please enter valid email address"
         case .custom(let key):  return LocalizedStringKey(key)
         }
     }
@@ -694,8 +755,13 @@ struct RegisterRestaurantScreen: View {
     // MARK: - Photo loader
     
     private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        viewModel.clearImageSizeError()
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            guard data.count <= ValidateCredentialsUseCase.maxImageSizeBytes else {
+                viewModel.flagOversizedImage()
+                continue
+            }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("jpg")
@@ -707,6 +773,20 @@ struct RegisterRestaurantScreen: View {
             }
         }
         photoSelection.removeAll()
+    }
+
+    private func handleCapturedImage(_ image: UIImage) {
+        viewModel.clearImageSizeError()
+        guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+        guard data.count <= ValidateCredentialsUseCase.maxImageSizeBytes else {
+            viewModel.flagOversizedImage()
+            return
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        viewModel.addImage(url)
     }
 }
 
@@ -749,7 +829,7 @@ private struct SvCompactToggle: View {
         } label: {
             ZStack {
                 Capsule()
-                    .fill(isOn ? Color.svPrimary : Color(red: 0.35, green: 0.76, blue: 0.42))
+                    .fill(isOn ? Color.svPrimary : Color.svDivider)
 
                 Circle()
                     .fill(Color.white)
@@ -781,7 +861,7 @@ private struct TimeChip: View {
             Text(isEnabled ? time.formattedString : "—")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(isEnabled ? Color(red: 0.2, green: 0.2, blue: 0.2) : Color.svSecondary)
-                .frame(width: 65, height: 30)
+                .frame(width: 78, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color(red: 0.98, green: 0.98, blue: 0.98))

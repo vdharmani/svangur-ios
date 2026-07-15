@@ -33,6 +33,7 @@ struct DashboardScreen: View {
         .background(Color.svBackground.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbarVisibility(.hidden, for: .navigationBar)
+        .svErrorBanner(viewModel.actionErrorMessage)
         .task { await viewModel.onAppear() }
         .blur(radius: viewModel.offerIdToDelete != nil ? 2 : 0)
         .overlay {
@@ -380,10 +381,20 @@ struct DashboardScreen: View {
     @ViewBuilder
     private func offerImage(_ offer: OfferUi) -> some View {
         if let url = offer.imageUrls.first {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                imagePlaceholder
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    imagePlaceholder
+                default:
+                    // While loading, show a neutral shimmer rather than the "no image" stock
+                    // photo — that stock photo flashing before the real one loads reads as the
+                    // wrong image, not as a loading state.
+                    RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                        .fill(Color.svShimmer)
+                        .redacted(reason: .placeholder)
+                }
             }
             .frame(width: 80, height: 80)
             .clipShape(RoundedRectangle(cornerRadius: SvSpacing.inputRadius))

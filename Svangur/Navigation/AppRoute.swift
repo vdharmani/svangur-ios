@@ -25,7 +25,7 @@ enum AppRoute: Hashable, Sendable {
 
     // MARK: - Location
     case selectLocation
-    case confirmLocation(name: String)
+    case confirmLocation(name: String, placeID: String?)
 
     // MARK: - Auth
     case entry

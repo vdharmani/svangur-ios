@@ -4,15 +4,28 @@ import SwiftUI
 @Observable
 final class HomeViewModel {
     // MARK: - Filter state
-    var searchQuery: String = ""
     private(set) var selectedCategory: OfferCategory?
-    private(set) var selectedDiscountFilter: DiscountFilter = .all
-    private(set) var selectedDay: Weekday?
+    /// Real, dynamic discount filters (`GET /discount-options` `user_filters` via
+    /// `DealRepositoryProtocol`). Falls back to `Self.fallbackDiscountFilters` if the fetch
+    /// fails or returns empty, so the chip row always has something selectable.
+    private(set) var discountFilters: [DiscountUserFilter] = HomeViewModel.fallbackDiscountFilters
+    private(set) var selectedDiscountFilterKey: String = "all"
+    /// Real, dynamic days (`GET /days` via `GetDaysUseCaseProtocol`) — labels, key order, and
+    /// which one `isToday` all come from the server (tz-aware), not the device's local
+    /// `Calendar`. Falls back to a locally-computed Mon–Sun list if the fetch fails.
+    private(set) var days: [DayItem] = HomeViewModel.fallbackDays()
+    private(set) var selectedDayKey: String?
+    /// Guards against an in-flight `loadDays(lang:)` overwriting a day the user already picked.
+    private var userSelectedDay = false
     private(set) var openNowOnly: Bool = true
 
     // MARK: - UI state
     private(set) var state: HomeUiState = .idle
     var viewMode: ViewMode = .list
+    private(set) var locationDisplayText: String = "Detecting location…"
+    /// A pull-to-refresh (or filter-change) failure while deals are already visible — surfaced
+    /// as a banner rather than replacing `state` (which would wipe the still-valid list).
+    private(set) var refreshErrorMessage: String?
 
     // MARK: - Map state
     let mapPins: [DealMapPin] = DealMapPin.mockPins
@@ -21,19 +34,45 @@ final class HomeViewModel {
     enum ViewMode { case list, map }
 
     // MARK: - Dependencies
-    private let getNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol
-    private var allOffers: [Offer] = []
+    private let getHomeDealsUseCase: GetHomeDealsUseCaseProtocol
+    private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
+    private let dealRepository: DealRepositoryProtocol
+    private let getDaysUseCase: GetDaysUseCaseProtocol
 
-    init(getNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol) {
-        self.getNearbyOffersUseCase = getNearbyOffersUseCase
-        self.selectedDay = currentWeekday()
+    // MARK: - Configuration
+    private let deviceId: String
+
+    // MARK: - Session state (resolved once per `onAppear`, reused by filter changes/refresh)
+    private var currentLang: String = AppLanguage.english.rawValue
+    private var currentCoordinate: (latitude: Double, longitude: Double)?
+
+    init(
+        getHomeDealsUseCase: GetHomeDealsUseCaseProtocol,
+        getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol,
+        dealRepository: DealRepositoryProtocol,
+        getDaysUseCase: GetDaysUseCaseProtocol,
+        deviceId: String
+    ) {
+        self.getHomeDealsUseCase = getHomeDealsUseCase
+        self.getCurrentLocationUseCase = getCurrentLocationUseCase
+        self.dealRepository = dealRepository
+        self.getDaysUseCase = getDaysUseCase
+        self.deviceId = deviceId
+        self.selectedDayKey = days.first(where: \.isToday)?.key
     }
 
     // MARK: - Lifecycle
 
-    func onAppear() async {
-        guard state == .idle else { return }
-        await loadOffers()
+    func onAppear(lang: String) async {
+        currentLang = lang
+        async let discountFiltersTask: Void = loadDiscountFilters(lang: lang)
+        async let daysTask: Void = loadDays(lang: lang)
+        await loadLocation()
+        if state == .idle {
+            await loadOffers()
+        }
+        await discountFiltersTask
+        await daysTask
     }
 
     func refresh() async {
@@ -44,22 +83,28 @@ final class HomeViewModel {
 
     func selectCategory(_ category: OfferCategory?) {
         selectedCategory = category
-        applyFilters()
+        // JUDGMENT CALL (reshape to real backend API): `selectedCategory` is the old fixed
+        // `OfferCategory` enum, kept only for Home's hardcoded filter-chip UI (see
+        // `OfferCategory.swift`). It has no mapping onto the backend's dynamic `category_id` —
+        // wiring that up would mean threading the real category list through Home, which is out
+        // of scope for this pass. Selecting a category therefore only drives chip highlighting,
+        // it does not refetch the feed.
     }
 
-    func selectDiscountFilter(_ filter: DiscountFilter) {
-        selectedDiscountFilter = filter
-        applyFilters()
+    func selectDiscountFilter(_ filter: DiscountUserFilter) {
+        selectedDiscountFilterKey = filter.key
+        Task { await loadOffers() }
     }
 
-    func selectDay(_ day: Weekday?) {
-        selectedDay = day
-        applyFilters()
+    func selectDay(_ day: DayItem?) {
+        userSelectedDay = true
+        selectedDayKey = day?.key
+        Task { await loadOffers() }
     }
 
     func toggleOpenNow() {
         openNowOnly.toggle()
-        applyFilters()
+        Task { await loadOffers() }
     }
 
     func toggleViewMode() {
@@ -70,77 +115,79 @@ final class HomeViewModel {
         selectedPin = pin
     }
 
-    // MARK: - Computed
-
-    var orderedDays: [Weekday] {
-        let today = currentWeekday()
-        let all = Weekday.allCases
-        guard let idx = all.firstIndex(of: today) else { return all }
-        return Array(all[idx...]) + Array(all[..<idx])
-    }
-
-    var todayWeekday: Weekday { currentWeekday() }
-
     // MARK: - Private
 
-    private func loadOffers() async {
-        state = .loading
+    private func loadLocation() async {
         do throws(AppError) {
-            allOffers = try await getNearbyOffersUseCase.execute()
-            applyFilters()
+            let snapshot = try await getCurrentLocationUseCase.execute()
+            currentCoordinate = (snapshot.latitude, snapshot.longitude)
+            locationDisplayText = snapshot.displayText
         } catch {
-            state = .error(error.displayMessage)
+            currentCoordinate = nil
+            locationDisplayText = "Location unavailable"
         }
     }
 
-    private func applyFilters() {
-        var filtered = allOffers.filter { $0.isActive }
-
-        // JUDGMENT CALL (reshape to real backend API): `selectedCategory` is the old fixed
-        // `OfferCategory` enum, kept only for Home's hardcoded filter-chip UI (see
-        // `OfferCategory.swift`). It no longer has a data-level mapping onto the backend's
-        // dynamic `categoryId` — wiring that up would mean threading the real category list
-        // through Home, which is out of scope for this "minimal rewire" pass. Category
-        // selection therefore only drives chip highlighting now, not actual filtering.
-
-        if selectedDiscountFilter != .all {
-            filtered = filtered.filter { selectedDiscountFilter.matches($0.discountValue) }
+    private func loadDiscountFilters(lang: String) async {
+        do throws(AppError) {
+            let fetched = try await dealRepository.listDiscountFilters(lang: lang)
+            discountFilters = fetched.isEmpty ? Self.fallbackDiscountFilters : fetched
+        } catch {
+            discountFilters = Self.fallbackDiscountFilters
         }
+    }
 
-        if let day = selectedDay {
-            filtered = filtered.filter { $0.validDays.contains(day) }
-        }
-
-        if openNowOnly {
-            filtered = filtered.filter { offer in
-                Offer.isCurrentlyOpen(
-                    validDays: offer.validDays,
-                    from: offer.validTimeStart,
-                    until: offer.validTimeEnd
-                )
+    private func loadDays(lang: String) async {
+        do throws(AppError) {
+            let fetched = try await getDaysUseCase.execute(lang: lang, tz: TimeZone.current.identifier)
+            guard !fetched.isEmpty else { return }
+            days = fetched
+            if !userSelectedDay {
+                selectedDayKey = fetched.first(where: \.isToday)?.key
             }
+        } catch {
+            // Keep the locally-computed fallback days.
+        }
+    }
+
+    /// Fetches the consumer feed (`GET /offers`) with the current filter selection — the
+    /// server applies discount/day/open-now filtering and distance sorting, so no client-side
+    /// filtering is needed once this returns.
+    private func loadOffers() async {
+        let isRefreshOfExistingContent: Bool
+        switch state {
+        case .loaded, .empty: isRefreshOfExistingContent = true
+        default: isRefreshOfExistingContent = false
         }
 
-        if !searchQuery.isEmpty {
-            let query = searchQuery.lowercased()
-            filtered = filtered.filter {
-                $0.titleEn.lowercased().contains(query) ||
-                ($0.descriptionEn ?? "").lowercased().contains(query)
-            }
+        if !isRefreshOfExistingContent {
+            state = .loading
         }
-
-        let mockNames = ["Pizza Palace", "Burger Joint", "Sweet Bites", "Noodle House", "Taco Town"]
-        let deals = filtered.enumerated().map { idx, offer in
-            offer.toDealCard(
-                restaurantName: mockNames[idx % mockNames.count],
-                distance: String(format: "%.1f km", Double.random(in: 0.3...5.0))
+        do throws(AppError) {
+            let deals = try await getHomeDealsUseCase.execute(
+                latitude: currentCoordinate?.latitude,
+                longitude: currentCoordinate?.longitude,
+                categoryId: nil,
+                discountFilter: selectedDiscountFilterKey,
+                day: selectedDayKey,
+                openNow: openNowOnly,
+                lang: currentLang,
+                page: 1,
+                limit: 20,
+                deviceId: deviceId
             )
+            refreshErrorMessage = nil
+            state = deals.isEmpty ? .empty : .loaded(deals.map { $0.toDealCard() })
+        } catch {
+            if isRefreshOfExistingContent {
+                refreshErrorMessage = error.displayMessage
+            } else {
+                state = .error(error.displayMessage)
+            }
         }
-
-        state = deals.isEmpty ? .empty : .loaded(deals)
     }
 
-    private func currentWeekday() -> Weekday {
+    private static func currentWeekday() -> Weekday {
         let weekdayComponent = Calendar.current.component(.weekday, from: Date())
         return switch weekdayComponent {
         case 1: .sunday
@@ -153,6 +200,26 @@ final class HomeViewModel {
         default: .monday
         }
     }
+
+    /// JUDGMENT CALL: locally-computed (device `Calendar`, not server tz) fallback used only
+    /// before the real `/days` fetch resolves, or if it fails.
+    private static func fallbackDays() -> [DayItem] {
+        let today = currentWeekday()
+        return Weekday.allCases.map { day in
+            DayItem(key: day.dayCode, label: day.shortName, shortLabel: day.shortName, isToday: day == today)
+        }
+    }
+
+    /// JUDGMENT CALL: small hardcoded fallback mirroring the real `/discount-options`
+    /// `user_filters` shape, so the discount chip row stays functional if
+    /// `listDiscountFilters(lang:)` fails or the backend returns nothing — NOT meant to be a
+    /// faithful mirror of any real filter ids.
+    private static let fallbackDiscountFilters: [DiscountUserFilter] = [
+        DiscountUserFilter(id: 1, key: "all", label: "All Offers"),
+        DiscountUserFilter(id: 2, key: "20_plus", label: "20%+"),
+        DiscountUserFilter(id: 3, key: "30_plus", label: "30%+"),
+        DiscountUserFilter(id: 4, key: "2_for_1", label: "2 for 1")
+    ]
 }
 
 // MARK: - Preview Factory
@@ -161,13 +228,62 @@ extension HomeViewModel {
     @MainActor
     static func previewInstance(state: HomeUiState = .idle) -> HomeViewModel {
         let vm = HomeViewModel(
-            getNearbyOffersUseCase: FakeGetNearbyOffersUseCase()
+            getHomeDealsUseCase: FakeGetHomeDealsUseCase(),
+            getCurrentLocationUseCase: FakeGetCurrentLocationUseCase(),
+            dealRepository: FakeDealRepository(),
+            getDaysUseCase: FakeGetDaysUseCase(),
+            deviceId: "preview-device"
         )
         vm.state = state
         return vm
     }
 }
 
-private struct FakeGetNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol {
-    func execute() async throws(AppError) -> [Offer] { [] }
+private struct FakeGetHomeDealsUseCase: GetHomeDealsUseCaseProtocol {
+    func execute(
+        latitude: Double?,
+        longitude: Double?,
+        categoryId: String?,
+        discountFilter: String,
+        day: String?,
+        openNow: Bool,
+        lang: String,
+        page: Int,
+        limit: Int,
+        deviceId: String
+    ) async throws(AppError) -> [DealListing] { [] }
+}
+
+private struct FakeGetCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol {
+    func execute() async throws(AppError) -> LocationSnapshot {
+        LocationSnapshot(latitude: 64.1466, longitude: -21.9426, displayText: "Reykjavik, Iceland")
+    }
+}
+
+private struct FakeDealRepository: DealRepositoryProtocol {
+    func listDeals(
+        latitude: Double?,
+        longitude: Double?,
+        categoryId: String?,
+        discountFilter: String?,
+        day: String?,
+        openNow: Bool?,
+        lang: String?,
+        page: Int?,
+        limit: Int?,
+        deviceId: String?
+    ) async throws(AppError) -> [DealListing] { [] }
+    func listCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
+    func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
+    func listDiscountFilters(lang: String) async throws(AppError) -> [DiscountUserFilter] { [] }
+    func listOwnerDiscountOptions(lang: String) async throws(AppError) -> [DiscountOwnerOption] { [] }
+    func getDeal(id: String) async throws(AppError) -> DealListing {
+        throw .notFound()
+    }
+    func trackView(id: String) async throws(AppError) {}
+    func trackClick(id: String) async throws(AppError) {}
+}
+
+private struct FakeGetDaysUseCase: GetDaysUseCaseProtocol {
+    func execute(lang: String, tz: String) async throws(AppError) -> [DayItem] { [] }
 }

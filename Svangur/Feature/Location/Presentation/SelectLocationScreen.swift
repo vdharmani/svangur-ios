@@ -135,7 +135,7 @@ struct SelectLocationScreen: View {
     private func recentChip(_ name: String) -> some View {
         Button {
             viewModel.selectRecent(name)
-            router.navigate(to: .confirmLocation(name: name))
+            router.navigate(to: .confirmLocation(name: name, placeID: nil))
         } label: {
             HStack(spacing: SvSpacing.sm) {
                 Image("ic_recentTime")
@@ -171,7 +171,7 @@ struct SelectLocationScreen: View {
 
     private var useCurrentLocationButton: some View {
         Button {
-            router.navigate(to: .confirmLocation(name: "Current location"))
+            router.navigate(to: .confirmLocation(name: "Current location", placeID: nil))
         } label: {
                 Text("📍  Use current location")
                     .font(SvFont.bodySmallStrong)
@@ -199,12 +199,17 @@ struct SelectLocationScreen: View {
         case .idle:
             EmptyView()
 
+        case .searching:
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.top, SvSpacing.lg)
+
         case .results(let results):
             VStack(spacing: 0) {
                 ForEach(results) { result in
                     Button {
                         viewModel.selectResult(result)
-                        router.navigate(to: .confirmLocation(name: result.displayName))
+                        router.navigate(to: .confirmLocation(name: result.displayName, placeID: result.id))
                     } label: {
                         HStack(spacing: SvSpacing.md) {
                             Image(systemName: "mappin")
@@ -228,6 +233,14 @@ struct SelectLocationScreen: View {
                 Text("No matches for \"\(query)\"")
                     .font(SvFont.bodySmall)
                     .foregroundStyle(Color.svSecondary)
+            }
+            .padding(.top, SvSpacing.lg)
+
+        case .error(let message):
+            VStack(alignment: .leading, spacing: SvSpacing.sm) {
+                Text(message)
+                    .font(SvFont.bodySmall)
+                    .foregroundStyle(Color.svError)
             }
             .padding(.top, SvSpacing.lg)
         }

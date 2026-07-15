@@ -1,47 +1,25 @@
 import Foundation
 
-extension Offer {
-    func toDealCard(
-        restaurantName: String = "Local Restaurant",
-        distance: String = "1.2 km"
-    ) -> DealCardUi {
+extension DealListing {
+    func toDealCard() -> DealCardUi {
         DealCardUi(
-            id: id,
-            restaurantName: restaurantName,
-            title: titleEn,
-            discountBadge: discountDisplayText,
-            categoryName: categoryId.map { "Category #\($0)" } ?? "Other",
-            distance: distance,
-            validTimeText: "\(validTimeStart.formatted24h)–\(validTimeEnd.formatted24h)",
-            imageUrl: heroImageUrl ?? imageUrls.first,
-            isOpenNow: Self.isCurrentlyOpen(validDays: validDays, from: validTimeStart, until: validTimeEnd)
+            id: Int64(id) ?? 0,
+            restaurantName: restaurantName ?? "",
+            title: title,
+            discountBadge: customDiscountText ?? "",
+            categoryName: categoryName ?? "",
+            distance: distanceKm.map { String(format: "%.1f km", $0) } ?? "",
+            validTimeText: "\(dealCardTime(validTimeStart))–\(dealCardTime(validTimeEnd))",
+            imageUrl: heroImageUrl.flatMap(URL.init(string:)),
+            isOpenNow: isOpenNow ?? false
         )
     }
+}
 
-    static func isCurrentlyOpen(
-        validDays: Set<Weekday>,
-        from: TimeOfDay,
-        until: TimeOfDay
-    ) -> Bool {
-        let calendar = Calendar.current
-        let now = Date()
-        let weekdayComponent = calendar.component(.weekday, from: now)
-
-        let mapped: Weekday? = switch weekdayComponent {
-        case 1: .sunday
-        case 2: .monday
-        case 3: .tuesday
-        case 4: .wednesday
-        case 5: .thursday
-        case 6: .friday
-        case 7: .saturday
-        default: nil
-        }
-        guard let mapped, validDays.contains(mapped) else { return false }
-
-        let hour = calendar.component(.hour, from: now)
-        let minute = calendar.component(.minute, from: now)
-        let current = hour * 60 + minute
-        return current >= from.minutesSinceMidnight && current <= until.minutesSinceMidnight
-    }
+/// The feed's `valid_time_start`/`valid_time_end` are raw wire strings ("HH:mm" or
+/// "HH:mm:ss") — `TimeOfDay`'s parser only accepts a 2-part "HH:mm" string, so this formats
+/// just the "HH:mm" prefix and falls back to the raw string if it doesn't parse.
+private func dealCardTime(_ raw: String?) -> String {
+    guard let raw, let time = TimeOfDay(string: String(raw.prefix(5))) else { return raw ?? "" }
+    return time.formatted24h
 }

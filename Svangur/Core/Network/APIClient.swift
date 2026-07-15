@@ -77,7 +77,7 @@ final class APIClient: APIClientProtocol, Sendable {
                     continue
                 }
 
-                try mapHTTPStatus(httpResponse.statusCode)
+                try mapHTTPStatus(httpResponse.statusCode, data: data)
 
                 return data
             } catch let error as AppError {
@@ -141,27 +141,49 @@ final class APIClient: APIClientProtocol, Sendable {
     }
     #endif
 
-    private func mapHTTPStatus(_ code: Int) throws(AppError) {
+    private func mapHTTPStatus(_ code: Int, data: Data) throws(AppError) {
         switch code {
         case 200..<300:
             return
         case 401:
-            throw .unauthorized()
+            throw .unauthorized(message: Self.serverMessage(from: data) ?? "Session expired")
         case 404:
-            throw .notFound()
+            throw .notFound(message: Self.serverMessage(from: data) ?? "Not found")
         case 400..<500:
-            throw .server(code: code, message: "Client error")
+            throw .server(code: code, message: Self.serverMessage(from: data) ?? "Client error")
         case 500..<600:
-            throw .server(code: code, message: "Server error")
+            throw .server(code: code, message: Self.serverMessage(from: data) ?? "Server error")
         default:
             throw .unknown(message: "Unexpected HTTP status: \(code)")
         }
+    }
+
+    /// Pulls the server's own `message` out of its `{ success, message, error_code }` error
+    /// envelope — e.g. `"Invalid credentials"` for a 401 on login — instead of always falling
+    /// back to a generic status-code-derived string.
+    private static func serverMessage(from data: Data) -> String? {
+        guard let envelope = try? JSONDecoder().decode(ServerErrorEnvelope.self, from: data),
+              let message = envelope.message, !message.isEmpty else { return nil }
+        return message
     }
 
     private func retryAfterHeader(_ response: HTTPURLResponse) -> Duration? {
         guard let value = response.value(forHTTPHeaderField: "Retry-After"),
               let seconds = Int(value) else { return nil }
         return .seconds(seconds)
+    }
+}
+
+/// Mirrors this backend's standard error response shape: `{ "success": false, "message": "...",
+/// "error_code": "..." }`. `errorCode` isn't consumed yet — kept for when callers need to branch
+/// on it rather than match the display message.
+private struct ServerErrorEnvelope: Decodable {
+    let message: String?
+    let errorCode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case errorCode = "error_code"
     }
 }
 

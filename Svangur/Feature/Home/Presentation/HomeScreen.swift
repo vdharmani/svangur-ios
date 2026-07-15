@@ -33,7 +33,8 @@ struct HomeScreen: View {
         .background(Color.svBackground)
         .navigationBarBackButtonHidden(true)
         .toolbarVisibility(.hidden, for: .navigationBar)
-        .task { await viewModel.onAppear() }
+        .svErrorBanner(viewModel.refreshErrorMessage)
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
     }
 
     private var listContent: some View {
@@ -70,10 +71,11 @@ struct HomeScreen: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(Color.svOnPrimary.opacity(0.8))
                             }
-                            Text("Manhattan, New York...")
+                            Text(viewModel.locationDisplayText)
                                 .font(SvFont.caption)
                                 .foregroundStyle(Color.svOnPrimary)
                                 .padding(.leading, SvSpacing.xxs)
+                                .lineLimit(1)
                         }
                     }
                     .buttonStyle(.plain)
@@ -342,8 +344,11 @@ struct HomeScreen: View {
                     categoryItem(name: "Burger", category: .burgers, imageName: "burger")
                     categoryItem(name: "Pizza", category: .pizza, imageName: "pizza")
                     categoryItem(name: "Asian", category: .asian, imageName: "dish")
-                    categoryItem(name: "Sushi", category: .sushi, imageName: "burger")
-                    categoryItem(name: "Mexican", category: .mexican, imageName: "pizza")
+                    // No distinct Sushi/Mexican food photography is bundled yet (reusing
+                    // Burger's/Pizza's photos looked like the wrong image) — a symbol-based
+                    // placeholder is used until real photos are added to Assets.xcassets.
+                    categoryItem(name: "Sushi", category: .sushi, symbolName: "fish.fill")
+                    categoryItem(name: "Mexican", category: .mexican, symbolName: "flame.fill")
                 }
                 .padding(.horizontal, SvSpacing.screenPadding)
             }
@@ -352,7 +357,12 @@ struct HomeScreen: View {
     }
     
 
-    private func categoryItem(name: String, category: OfferCategory?, imageName: String) -> some View {
+    private func categoryItem(
+        name: String,
+        category: OfferCategory?,
+        imageName: String? = nil,
+        symbolName: String? = nil
+    ) -> some View {
         let isSelected = viewModel.selectedCategory == category
 
         return Button {
@@ -361,9 +371,7 @@ struct HomeScreen: View {
             VStack(spacing: SvSpacing.md) {
 
                 ZStack(alignment: .topTrailing) {
-                    Image(imageName)
-                        .resizable()
-                        .scaledToFill()
+                    categoryIcon(imageName: imageName, symbolName: symbolName)
                         .frame(width: 60, height: 60)
                         .clipShape(Circle())
                         .overlay(
@@ -402,7 +410,24 @@ struct HomeScreen: View {
         .frame(minWidth: 44, minHeight: 44)
         .accessibilityLabel("\(name) category")
     }
-    
+
+    @ViewBuilder
+    private func categoryIcon(imageName: String?, symbolName: String?) -> some View {
+        if let imageName {
+            Image(imageName)
+                .resizable()
+                .scaledToFill()
+        } else if let symbolName {
+            Circle()
+                .fill(Color.svPrimary.opacity(0.12))
+                .overlay(
+                    Image(systemName: symbolName)
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(Color.svPrimary)
+                )
+        }
+    }
+
     // MARK: - Discount Options
 
     private var discountSection: some View {
@@ -414,7 +439,7 @@ struct HomeScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
-                    ForEach(DiscountFilter.allCases) { filter in
+                    ForEach(viewModel.discountFilters, id: \.id) { filter in
                         discountChip(filter)
                     }
                 }
@@ -423,28 +448,24 @@ struct HomeScreen: View {
         }
     }
 
-    private func discountChip(_ filter: DiscountFilter) -> some View {
-        let isSelected = viewModel.selectedDiscountFilter == filter
-        let isAllFilter = filter == .all
+    private func discountChip(_ filter: DiscountUserFilter) -> some View {
+        let isSelected = viewModel.selectedDiscountFilterKey == filter.key
+        // "All Offers" wraps onto two lines (e.g. "All" / "Offers") to match the chip's
+        // square shape — any other multi-word label falls back to a single line.
+        let labelWords = filter.key == "all" ? filter.label.split(separator: " ", maxSplits: 1) : []
 
         return Button {
             viewModel.selectDiscountFilter(filter)
         } label: {
             VStack(spacing: 0) {
-                if isAllFilter {
-                    Text("All")
+                if labelWords.count == 2 {
+                    Text(labelWords[0])
                         .font(SvFont.caption)
-                    Text("Offers")
+                    Text(labelWords[1])
                         .font(SvFont.labelTitle)
                 } else {
-                    HStack(spacing: SvSpacing.xs) {
-                        if let icon = filter.iconName {
-                            Image(systemName: icon)
-                                .font(.system(size: 12))
-                        }
-                        Text(filter.displayName)
-                            .font(SvFont.labelTitle)
-                    }
+                    Text(filter.label)
+                        .font(SvFont.labelTitle)
                 }
             }
             .padding(.horizontal, 8)
@@ -484,7 +505,7 @@ struct HomeScreen: View {
             
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(filter.displayName)
+        .accessibilityLabel(filter.label)
     }
     // MARK: - Days of the Week
 
@@ -497,7 +518,7 @@ struct HomeScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.sm) {
-                    ForEach(viewModel.orderedDays) { day in
+                    ForEach(viewModel.days, id: \.key) { day in
                         dayChip(day)
                     }
                 }
@@ -507,10 +528,10 @@ struct HomeScreen: View {
         }
     }
 
-    private func dayChip(_ day: Weekday) -> some View {
-        let isSelected = viewModel.selectedDay == day
-        let isToday = day == viewModel.todayWeekday
-        let label = isToday ? "Today" : day.shortName
+    private func dayChip(_ day: DayItem) -> some View {
+        let isSelected = viewModel.selectedDayKey == day.key
+        let isToday = day.isToday
+        let label = isToday ? "Today" : day.shortLabel
 
         let shape = RoundedRectangle(
             cornerRadius: 14,
@@ -568,8 +589,8 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         .accessibilityLabel(
             isToday
-            ? "Today, \(day.shortName)"
-            : day.shortName
+            ? "Today, \(day.shortLabel)"
+            : day.shortLabel
         )
     }
     

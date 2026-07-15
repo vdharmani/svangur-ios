@@ -131,9 +131,23 @@ final class DIContainer: Sendable {
         GetNearbyOffersUseCase(offerRepository: makeOfferRepository())
     }
 
+    func makeGetHomeDealsUseCase() -> GetHomeDealsUseCaseProtocol {
+        GetHomeDealsUseCase(dealRepository: makeDealRepository())
+    }
+
     @MainActor
     func makeHomeViewModel() -> HomeViewModel {
-        HomeViewModel(getNearbyOffersUseCase: makeGetNearbyOffersUseCase())
+        HomeViewModel(
+            getHomeDealsUseCase: makeGetHomeDealsUseCase(),
+            getCurrentLocationUseCase: makeGetCurrentLocationUseCase(),
+            dealRepository: makeDealRepository(),
+            getDaysUseCase: makeGetDaysUseCase(),
+            deviceId: DeviceIdentifier.current()
+        )
+    }
+
+    func makeGetCurrentLocationUseCase() -> GetCurrentLocationUseCaseProtocol {
+        GetCurrentLocationUseCase(locationService: locationService)
     }
 
     @MainActor
@@ -143,12 +157,12 @@ final class DIContainer: Sendable {
 
     @MainActor
     func makeSelectLocationViewModel() -> SelectLocationViewModel {
-        SelectLocationViewModel()
+        SelectLocationViewModel(placesService: placesService)
     }
 
     @MainActor
-    func makeConfirmLocationViewModel(name: String) -> ConfirmLocationViewModel {
-        ConfirmLocationViewModel(name: name)
+    func makeConfirmLocationViewModel(name: String, placeID: String?) -> ConfirmLocationViewModel {
+        ConfirmLocationViewModel(placesService: placesService, name: name, placeID: placeID)
     }
 
     @MainActor
@@ -342,7 +356,8 @@ final class DIContainer: Sendable {
     func makeEditRestaurantViewModel() -> EditRestaurantViewModel {
         EditRestaurantViewModel(
             getProfileUseCase: makeGetRestaurantProfileUseCase(),
-            updateProfileUseCase: makeUpdateRestaurantProfileUseCase()
+            updateProfileUseCase: makeUpdateRestaurantProfileUseCase(),
+            placesService: placesService
         )
     }
 

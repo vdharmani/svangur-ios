@@ -107,7 +107,7 @@ final class AddOfferViewModel {
     /// between waiting on the sum of four network calls and waiting on the slowest single one.
     func onAppear(lang: String) async {
         async let categoriesTask: Void = loadCategories(lang: lang)
-        async let discountOptionsTask: Void = loadDiscountOptions()
+        async let discountOptionsTask: Void = loadDiscountOptions(lang: lang)
         async let daysTask: Void = loadDays(lang: lang)
 
         if case .edit(let id) = mode {
@@ -216,9 +216,9 @@ final class AddOfferViewModel {
         }
     }
 
-    private func loadDiscountOptions() async {
+    private func loadDiscountOptions(lang: String) async {
         do throws(AppError) {
-            let fetched = try await dealRepository.listOwnerDiscountOptions()
+            let fetched = try await dealRepository.listOwnerDiscountOptions(lang: lang)
             discountOptions = fetched.isEmpty ? Self.fallbackDiscountOptions : fetched
         } catch {
             discountOptions = Self.fallbackDiscountOptions
@@ -300,14 +300,19 @@ private struct FakeDealRepository: DealRepositoryProtocol {
     func listDeals(
         latitude: Double?,
         longitude: Double?,
-        categoryIds: [String],
-        minDiscountPercent: Int?,
-        day: String?
+        categoryId: String?,
+        discountFilter: String?,
+        day: String?,
+        openNow: Bool?,
+        lang: String?,
+        page: Int?,
+        limit: Int?,
+        deviceId: String?
     ) async throws(AppError) -> [DealListing] { [] }
     func listCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
     func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
-    func listDiscountFilters() async throws(AppError) -> [DiscountUserFilter] { [] }
-    func listOwnerDiscountOptions() async throws(AppError) -> [DiscountOwnerOption] { [] }
+    func listDiscountFilters(lang: String) async throws(AppError) -> [DiscountUserFilter] { [] }
+    func listOwnerDiscountOptions(lang: String) async throws(AppError) -> [DiscountOwnerOption] { [] }
     func getDeal(id: String) async throws(AppError) -> DealListing {
         throw .notFound()
     }

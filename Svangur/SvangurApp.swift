@@ -1,5 +1,7 @@
 import SwiftUI
 import GooglePlacesSwift
+import IQKeyboardManagerSwift
+import IQKeyboardToolbarManager
 
 @main
 struct SvangurApp: App {
@@ -10,6 +12,14 @@ struct SvangurApp: App {
 
     init() {
         PlacesClient.provideAPIKey(APIKeys.googlePlaces)
+
+        // Keeps the focused text field visible above the keyboard and adds a
+        // Previous/Next/Done toolbar app-wide, instead of hand-rolling keyboard-avoidance
+        // per form screen.
+        IQKeyboardManager.shared.isEnabled = true
+        IQKeyboardManager.shared.resignOnTouchOutside = true
+        IQKeyboardToolbarManager.shared.isEnabled = true
+
         let container = DIContainer()
         self.container = container
         self._session = State(wrappedValue: container.makeUserSession())
@@ -89,8 +99,8 @@ private struct RootView: View {
             SearchScreen(viewModel: container.makeSearchViewModel())
         case .selectLocation:
             SelectLocationScreen(viewModel: container.makeSelectLocationViewModel())
-        case .confirmLocation(let name):
-            ConfirmLocationScreen(viewModel: container.makeConfirmLocationViewModel(name: name))
+        case .confirmLocation(let name, let placeID):
+            ConfirmLocationScreen(viewModel: container.makeConfirmLocationViewModel(name: name, placeID: placeID))
         case .dealList:
             Text("Deal List")
         case .dealDetail(let dealId):

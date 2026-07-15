@@ -40,6 +40,15 @@ struct ConfirmLocationScreen: View {
         }
         .ignoresSafeArea(edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            await viewModel.onAppear()
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: viewModel.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                )
+            )
+        }
     }
 
     // MARK: - Map

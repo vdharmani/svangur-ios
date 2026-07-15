@@ -40,18 +40,32 @@ struct AddOfferScreen: View {
                 form
 
             case .error(let message):
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(message)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                // `.error` is reached from two different places in `AddOfferViewModel`:
+                // (a) edit mode's initial `getOfferUseCase.execute(id:)` fetch failing in
+                //     `onAppear()` — at that point `draft` was never populated from the real
+                //     offer, so the form would render entirely blank; in edit mode, saving
+                //     that blank form would overwrite the real offer with empty fields. This
+                //     path never sets `hasAttemptedSave`.
+                // (b) `save()` failing after the user already filled in (or edited) the form
+                //     and tapped Save/Update — `hasAttemptedSave` is always true here, since
+                //     `save()` sets it as its first line before validating/saving.
+                // These two cases share the same enum case with no other distinguishing data,
+                // so `hasAttemptedSave` (already exposed by the ViewModel) is used here as the
+                // signal to tell them apart without any ViewModel change.
+                if viewModel.hasAttemptedSave {
+                    // Save/update failed after the form was already fully shown — keep the
+                    // filled-in form visible and surface the failure via `SvErrorBanner`
+                    // instead of replacing the user's data with a full-screen takeover.
+                    form
+                } else {
+                    // Initial edit-mode fetch failed before any real data loaded — nothing
+                    // meaningful to show behind a banner, so this keeps the dedicated
+                    // full-screen error state.
+                    fullScreenError(message: message)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
             }
         }
+        .svErrorBanner(saveErrorMessage)
         .toolbar(.hidden, for: .navigationBar)
         .background(Color.svBackground.ignoresSafeArea())
         .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
@@ -128,6 +142,27 @@ struct AddOfferScreen: View {
         .safeAreaInset(edge: .bottom) {
             saveBar
         }
+    }
+
+    /// Save/update failure message (form stays visible, error shown as a banner) — `nil` for
+    /// every other state, including the initial edit-mode fetch failure (see the `.error` case
+    /// in `compactLayout()` for why `hasAttemptedSave` is the disambiguating signal).
+    private var saveErrorMessage: String? {
+        guard case .error(let message) = viewModel.loadState, viewModel.hasAttemptedSave else { return nil }
+        return message
+    }
+
+    private func fullScreenError(message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
     }
 
     private var customHeader: some View {

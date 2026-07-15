@@ -9,6 +9,13 @@ final class DashboardViewModel {
     private(set) var hasNextPage = false
     var offerIdToDelete: Int64?
 
+    /// Transient error from a *failed action* (currently: delete) taken while the offers list
+    /// was already loaded and visible. Kept separate from `state` so a delete failure surfaces
+    /// as a small banner (via `SvErrorBanner`) instead of clobbering the loaded list with the
+    /// full-screen `.error` state — the previous behavior wiped out the user's offers list just
+    /// because one delete failed. Cleared at the start of the next delete attempt.
+    private(set) var actionErrorMessage: String?
+
     private var currentPage = 1
     private let pageSize = 20
 
@@ -63,11 +70,15 @@ final class DashboardViewModel {
     func confirmDelete() async {
         guard let id = offerIdToDelete else { return }
         offerIdToDelete = nil
+        actionErrorMessage = nil
         do throws(AppError) {
             try await deleteOfferUseCase.execute(id: id)
             await loadInitial()
         } catch {
-            state = .error(error.displayMessage)
+            // Deliberately does NOT touch `state` — the offers list (`.loaded`) was already
+            // visible when the user chose to delete, and a failed delete shouldn't wipe it out
+            // from under them. Surface the failure via `actionErrorMessage` instead.
+            actionErrorMessage = error.displayMessage
         }
     }
 
