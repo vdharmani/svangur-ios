@@ -10,12 +10,19 @@ final class ConfirmLocationViewModel: ObservableObject {
     @Published private(set) var longitude: Double
 
     private let placesService: PlacesServiceProtocol
+    private let selectedLocationStore: SelectedLocationStoreProtocol
     /// The Google Places `place_id` the user picked on the search screen — `nil` for a recent
     /// search chip or "Use current location", which carry no Places suggestion to look up.
     private let placeID: String?
 
-    init(placesService: PlacesServiceProtocol, name: String, placeID: String?) {
+    init(
+        placesService: PlacesServiceProtocol,
+        selectedLocationStore: SelectedLocationStoreProtocol,
+        name: String,
+        placeID: String?
+    ) {
         self.placesService = placesService
+        self.selectedLocationStore = selectedLocationStore
         self.name = name
         self.placeID = placeID
         // Placeholder until `onAppear()` resolves the real place (or forever, if `placeID` is
@@ -40,6 +47,14 @@ final class ConfirmLocationViewModel: ObservableObject {
         self.longitude = longitude
     }
 
+    /// Publishes the pin's final resting position to `HomeViewModel` — triggered by the View's
+    /// "Confirm Location" button, right before `router.popToRoot()`.
+    func confirmLocation() async {
+        await selectedLocationStore.set(
+            SelectedLocation(latitude: latitude, longitude: longitude, displayText: name)
+        )
+    }
+
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
@@ -50,8 +65,18 @@ final class ConfirmLocationViewModel: ObservableObject {
 extension ConfirmLocationViewModel {
     @MainActor
     static func previewInstance(name: String = "Industrial Area") -> ConfirmLocationViewModel {
-        ConfirmLocationViewModel(placesService: FakePlacesService(), name: name, placeID: nil)
+        ConfirmLocationViewModel(
+            placesService: FakePlacesService(),
+            selectedLocationStore: FakeSelectedLocationStore(),
+            name: name,
+            placeID: nil
+        )
     }
+}
+
+private actor FakeSelectedLocationStore: SelectedLocationStoreProtocol {
+    func set(_ location: SelectedLocation) {}
+    func updates() -> AsyncStream<SelectedLocation> { AsyncStream { _ in } }
 }
 
 private struct FakePlacesService: PlacesServiceProtocol {

@@ -150,7 +150,10 @@ struct ConfirmLocationScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             SvPrimaryButton(title: "Confirm Location") {
-                router.popToRoot()
+                Task {
+                    await viewModel.confirmLocation()
+                    router.popToRoot()
+                }
             }
             .padding(.top, SvSpacing.xs)
         }

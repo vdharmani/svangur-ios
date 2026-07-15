@@ -9,6 +9,7 @@ final class DIContainer: Sendable {
     let keychainManager: KeychainManagerProtocol
     let locationService: LocationServiceProtocol
     let placesService: PlacesServiceProtocol
+    let selectedLocationStore: SelectedLocationStoreProtocol
     private let sharedAuthRepository: AuthRepositoryProtocol
     private let sharedOfferRepository: OfferRepositoryProtocol
 
@@ -17,12 +18,14 @@ final class DIContainer: Sendable {
         networkMonitor: NetworkMonitorProtocol = NetworkMonitor(),
         keychainManager: KeychainManagerProtocol = KeychainManager(),
         locationService: LocationServiceProtocol = LocationService(),
-        placesService: PlacesServiceProtocol = PlacesService()
+        placesService: PlacesServiceProtocol = PlacesService(),
+        selectedLocationStore: SelectedLocationStoreProtocol = SelectedLocationStore()
     ) {
         self.networkMonitor = networkMonitor
         self.keychainManager = keychainManager
         self.locationService = locationService
         self.placesService = placesService
+        self.selectedLocationStore = selectedLocationStore
         // `apiClient`'s default can't reference the `keychainManager` parameter directly (Swift
         // default-parameter expressions can't see sibling parameters), so it's built here
         // instead — ensures APIClient and AuthRepositoryImpl share the exact same Keychain
@@ -142,6 +145,7 @@ final class DIContainer: Sendable {
             getCurrentLocationUseCase: makeGetCurrentLocationUseCase(),
             dealRepository: makeDealRepository(),
             getDaysUseCase: makeGetDaysUseCase(),
+            selectedLocationStore: selectedLocationStore,
             deviceId: DeviceIdentifier.current()
         )
     }
@@ -162,7 +166,12 @@ final class DIContainer: Sendable {
 
     @MainActor
     func makeConfirmLocationViewModel(name: String, placeID: String?) -> ConfirmLocationViewModel {
-        ConfirmLocationViewModel(placesService: placesService, name: name, placeID: placeID)
+        ConfirmLocationViewModel(
+            placesService: placesService,
+            selectedLocationStore: selectedLocationStore,
+            name: name,
+            placeID: placeID
+        )
     }
 
     @MainActor

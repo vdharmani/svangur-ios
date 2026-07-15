@@ -656,8 +656,8 @@ private struct FieldErrorText: View {
 // MARK: - Category sheet
 
 /// Backed by the real, dynamic `DealCategory` list (`DealRepositoryProtocol.listOwnerCategories()`)
-/// injected into `AddOfferViewModel` — NOT the old closed-set `OfferCategory` enum. Selection is
-/// tracked by `DealCategory.id` (a `String`) rather than the whole struct, since `DealCategory`
+/// injected into `AddOfferViewModel`. Selection is tracked by `DealCategory.id` (a `String`)
+/// rather than the whole struct, since `DealCategory`
 /// isn't `Hashable` (it lives in `Feature/Deals`, out of scope to modify here) and SwiftUI's
 /// `Picker(selection:)` requires a `Hashable` binding value.
 private struct CategoryPickerSheet: View {

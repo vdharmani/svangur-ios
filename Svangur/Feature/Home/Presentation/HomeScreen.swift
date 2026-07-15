@@ -7,11 +7,16 @@ struct HomeScreen: View {
     @EnvironmentObject private var languageService: LanguageService
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @StateObject var viewModel: HomeViewModel
-    // iOS 16 fallback for the Map API below iOS 17 (see `mapContent`) — the legacy
-    // `Map(coordinateRegion:)` initializer needs a bound region; pins/selection are unaffected.
-    @State private var legacyMapRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 40.7138, longitude: -74.0050),
-        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+    // Reykjavik — used only until `viewModel.currentLocation` resolves (or if it never does).
+    private static let fallbackMapCoordinate = CLLocationCoordinate2D(latitude: 64.1466, longitude: -21.9426)
+    private static let mapSpan = MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+
+    // Single source of truth for the map's center — `MKCoordinateRegion` is available pre-iOS 17,
+    // unlike `MapCameraPosition` (iOS 17+ only), so it can't be a stored property's type here.
+    // The iOS 17+ `Map(position:)` binding below wraps/unwraps this region on the fly instead.
+    @State private var mapRegion = MKCoordinateRegion(
+        center: HomeScreen.fallbackMapCoordinate,
+        span: HomeScreen.mapSpan
     )
 
     init(viewModel: HomeViewModel) {
@@ -192,10 +197,17 @@ struct HomeScreen: View {
         ZStack(alignment: .bottom) {
             Group {
                 if #available(iOS 17, *) {
-                    Map(initialPosition: .region(MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: 40.7138, longitude: -74.0050),
-                        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-                    ))) {
+                    // `MapCameraPosition` is iOS 17+ only, so it can't back a stored property on
+                    // this pre-iOS-17-deployment-target screen — this binding wraps/unwraps it
+                    // around `mapRegion` (the actual `@State`) on the fly, only inside this branch.
+                    Map(position: Binding<MapCameraPosition>(
+                        get: { .region(mapRegion) },
+                        set: { newPosition in
+                            if let region = newPosition.region {
+                                mapRegion = region
+                            }
+                        }
+                    )) {
                         ForEach(viewModel.mapPins) { pin in
                             Annotation(pin.restaurantName, coordinate: CLLocationCoordinate2D(
                                 latitude: pin.latitude, longitude: pin.longitude
@@ -213,7 +225,7 @@ struct HomeScreen: View {
                     // equivalent for `.mapControls` (compass / user-location button), so those are
                     // simply omitted here. Pin rendering + selection behavior is unchanged.
                     Map(
-                        coordinateRegion: $legacyMapRegion,
+                        coordinateRegion: $mapRegion,
                         interactionModes: .all,
                         annotationItems: viewModel.mapPins
                     ) { pin in
@@ -240,6 +252,23 @@ struct HomeScreen: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: viewModel.selectedPin)
+        // `mapContent` is only mounted once `viewMode == .map`, by which point location has
+        // often already resolved — `onAppear` covers that case; `onChange` covers location
+        // resolving (or changing, e.g. via `ConfirmLocationScreen`) while the map is visible.
+        // Pre-iOS-17 `onChange(of:perform:)` is used since this screen's deployment target is
+        // below iOS 17.
+        .onAppear { syncMapRegion(from: viewModel.currentLocation) }
+        .onChange(of: viewModel.currentLocation) { newValue in
+            syncMapRegion(from: newValue)
+        }
+    }
+
+    private func syncMapRegion(from location: LocationSnapshot?) {
+        guard let location else { return }
+        mapRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude),
+            span: Self.mapSpan
+        )
     }
 
     private func mapPinView(_ pin: DealMapPin) -> some View {
@@ -365,15 +394,16 @@ struct HomeScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.lg) {
-                    categoryItem(name: "All", category: nil, imageName: "sandwich")
-                    categoryItem(name: "Burger", category: .burgers, imageName: "burger")
-                    categoryItem(name: "Pizza", category: .pizza, imageName: "pizza")
-                    categoryItem(name: "Asian", category: .asian, imageName: "dish")
-                    // No distinct Sushi/Mexican food photography is bundled yet (reusing
-                    // Burger's/Pizza's photos looked like the wrong image) — a symbol-based
-                    // placeholder is used until real photos are added to Assets.xcassets.
-                    categoryItem(name: "Sushi", category: .sushi, symbolName: "fish.fill")
-                    categoryItem(name: "Mexican", category: .mexican, symbolName: "flame.fill")
+                    categoryItem(name: "All", categoryId: nil, imageName: "sandwich")
+                    ForEach(viewModel.categories, id: \.id) { category in
+                        let icon = categoryIconAssets(for: category.slug)
+                        categoryItem(
+                            name: category.localizedName(for: languageService.current),
+                            categoryId: category.id,
+                            imageName: icon.imageName,
+                            symbolName: icon.symbolName
+                        )
+                    }
                 }
                 .padding(.horizontal, SvSpacing.screenPadding)
             }
@@ -384,13 +414,14 @@ struct HomeScreen: View {
 
     private func categoryItem(
         name: String,
-        category: OfferCategory?,
+        categoryId: String?,
         imageName: String? = nil,
         symbolName: String? = nil
     ) -> some View {
-        let isSelected = viewModel.selectedCategory == category
+        let isSelected = viewModel.selectedCategoryId == categoryId
 
         return Button {
+            let category = viewModel.categories.first { $0.id == categoryId }
             viewModel.selectCategory(category)
         } label: {
             VStack(spacing: SvSpacing.md) {
@@ -434,6 +465,20 @@ struct HomeScreen: View {
         .buttonStyle(.plain)
         .frame(minWidth: 44, minHeight: 44)
         .accessibilityLabel("\(name) category")
+    }
+
+    /// JUDGMENT CALL: the real `/categories` list has no icon/image field, and only a handful of
+    /// slugs have bundled photography (`burger`, `pizza`, `dish` for Asian). Any other slug falls
+    /// back to a generic SF Symbol so newly added backend categories still render sensibly.
+    private func categoryIconAssets(for slug: String) -> (imageName: String?, symbolName: String?) {
+        switch slug {
+        case "burgers", "burger": return ("burger", nil)
+        case "pizza": return ("pizza", nil)
+        case "asian": return ("dish", nil)
+        case "sushi": return (nil, "fish.fill")
+        case "mexican": return (nil, "flame.fill")
+        default: return (nil, "fork.knife")
+        }
     }
 
     @ViewBuilder
@@ -719,16 +764,29 @@ struct HomeScreen: View {
     private func dealCard(from deal: DealCardUi) -> some View {
         HStack(spacing: 0) { // Set spacing to 0 to handle padding manually
             // MARK: - Left Image
-            Image("SampleOfferBurgers") // Replace with deal.imageUrl if available
-                .resizable()
-                .scaledToFill()
-                .frame(width: 130, height: 130) // Fixed height to maintain card consistency
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: SvSpacing.cardRadius,
-                        bottomLeadingRadius: SvSpacing.cardRadius
-                    )
+            AsyncImage(url: deal.imageUrl) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .empty, .failure:
+                    Image("SampleOfferBurgers")
+                        .resizable()
+                        .scaledToFill()
+                @unknown default:
+                    Image("SampleOfferBurgers")
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+            .frame(width: 130, height: 130) // Fixed height to maintain card consistency
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: SvSpacing.cardRadius,
+                    bottomLeadingRadius: SvSpacing.cardRadius
                 )
+            )
             
             // MARK: - Right Content
             VStack(alignment: .leading, spacing: 4) {

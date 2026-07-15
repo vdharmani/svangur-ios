@@ -4,7 +4,9 @@ import Combine
 @MainActor
 final class HomeViewModel: ObservableObject {
     // MARK: - Filter state
-    @Published private(set) var selectedCategory: OfferCategory?
+    /// Real, dynamic categories (`GET /categories` `user_filters` via `DealRepositoryProtocol`).
+    @Published private(set) var categories: [DealCategory] = []
+    @Published private(set) var selectedCategoryId: String?
     /// Real, dynamic discount filters (`GET /discount-options` `user_filters` via
     /// `DealRepositoryProtocol`). Falls back to `Self.fallbackDiscountFilters` if the fetch
     /// fails or returns empty, so the chip row always has something selectable.
@@ -28,7 +30,10 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var refreshErrorMessage: String?
 
     // MARK: - Map state
-    let mapPins: [DealMapPin] = DealMapPin.mockPins
+    /// Derived from the same `GET /offers` response as `state` — populated in `loadOffers()`.
+    /// Deals without a coordinate are dropped (`DealListing.toMapPin()`), so this can be a
+    /// shorter list than the deals shown in `state`.
+    @Published private(set) var mapPins: [DealMapPin] = []
     @Published private(set) var selectedPin: DealMapPin?
 
     enum ViewMode { case list, map }
@@ -38,27 +43,39 @@ final class HomeViewModel: ObservableObject {
     private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
     private let dealRepository: DealRepositoryProtocol
     private let getDaysUseCase: GetDaysUseCaseProtocol
+    private let selectedLocationStore: SelectedLocationStoreProtocol
 
     // MARK: - Configuration
     private let deviceId: String
 
     // MARK: - Session state (resolved once per `onAppear`, reused by filter changes/refresh)
     private var currentLang: String = AppLanguage.english.rawValue
-    private var currentCoordinate: (latitude: Double, longitude: Double)?
+    /// The device's resolved coordinate + display text — `Published` so `HomeScreen` can center
+    /// the map on the real location instead of a hardcoded region.
+    @Published private(set) var currentLocation: LocationSnapshot?
+    /// Listens for a location manually confirmed on `ConfirmLocationScreen` — started once from
+    /// `onAppear`, cancelled in `deinit` per this project's memory-management rules.
+    private var locationObservationTask: Task<Void, Never>?
 
     init(
         getHomeDealsUseCase: GetHomeDealsUseCaseProtocol,
         getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol,
         dealRepository: DealRepositoryProtocol,
         getDaysUseCase: GetDaysUseCaseProtocol,
+        selectedLocationStore: SelectedLocationStoreProtocol,
         deviceId: String
     ) {
         self.getHomeDealsUseCase = getHomeDealsUseCase
         self.getCurrentLocationUseCase = getCurrentLocationUseCase
         self.dealRepository = dealRepository
         self.getDaysUseCase = getDaysUseCase
+        self.selectedLocationStore = selectedLocationStore
         self.deviceId = deviceId
         self.selectedDayKey = days.first(where: \.isToday)?.key
+    }
+
+    deinit {
+        locationObservationTask?.cancel()
     }
 
     // MARK: - Lifecycle
@@ -67,12 +84,15 @@ final class HomeViewModel: ObservableObject {
         currentLang = lang
         async let discountFiltersTask: Void = loadDiscountFilters(lang: lang)
         async let daysTask: Void = loadDays(lang: lang)
+        async let categoriesTask: Void = loadCategories(lang: lang)
         await loadLocation()
         if state == .idle {
             await loadOffers()
         }
         await discountFiltersTask
         await daysTask
+        await categoriesTask
+        observeSelectedLocation()
     }
 
     func refresh() async {
@@ -81,14 +101,9 @@ final class HomeViewModel: ObservableObject {
 
     // MARK: - Filter actions
 
-    func selectCategory(_ category: OfferCategory?) {
-        selectedCategory = category
-        // JUDGMENT CALL (reshape to real backend API): `selectedCategory` is the old fixed
-        // `OfferCategory` enum, kept only for Home's hardcoded filter-chip UI (see
-        // `OfferCategory.swift`). It has no mapping onto the backend's dynamic `category_id` —
-        // wiring that up would mean threading the real category list through Home, which is out
-        // of scope for this pass. Selecting a category therefore only drives chip highlighting,
-        // it does not refetch the feed.
+    func selectCategory(_ category: DealCategory?) {
+        selectedCategoryId = category?.id
+        Task { await loadOffers() }
     }
 
     func selectDiscountFilter(_ filter: DiscountUserFilter) {
@@ -120,10 +135,10 @@ final class HomeViewModel: ObservableObject {
     private func loadLocation() async {
         do throws(AppError) {
             let snapshot = try await getCurrentLocationUseCase.execute()
-            currentCoordinate = (snapshot.latitude, snapshot.longitude)
+            currentLocation = snapshot
             locationDisplayText = snapshot.displayText
         } catch {
-            currentCoordinate = nil
+            currentLocation = nil
             locationDisplayText = "Location unavailable"
         }
     }
@@ -137,13 +152,48 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    /// Subscribes once to `SelectedLocationStore` — when `ConfirmLocationScreen` publishes a
+    /// manually-picked coordinate, adopts it as `currentCoordinate` and refetches the feed.
+    private func observeSelectedLocation() {
+        guard locationObservationTask == nil else { return }
+        locationObservationTask = Task { [weak self] in
+            guard let self else { return }
+            for await location in await self.selectedLocationStore.updates() {
+                guard !Task.isCancelled else { return }
+                self.currentLocation = LocationSnapshot(
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    displayText: location.displayText
+                )
+                self.locationDisplayText = location.displayText
+                await self.loadOffers()
+            }
+        }
+    }
+
+    private func loadCategories(lang: String) async {
+        do throws(AppError) {
+            categories = try await dealRepository.listCategories(lang: lang)
+        } catch {
+            categories = []
+        }
+    }
+
     private func loadDays(lang: String) async {
         do throws(AppError) {
             let fetched = try await getDaysUseCase.execute(lang: lang, tz: TimeZone.current.identifier)
             guard !fetched.isEmpty else { return }
             days = fetched
             if !userSelectedDay {
-                selectedDayKey = fetched.first(where: \.isToday)?.key
+                let resolvedTodayKey = fetched.first(where: \.isToday)?.key
+                // The initial `loadOffers()` in `onAppear` may already have fired using the
+                // locally-computed fallback day key, before this server response arrived. If the
+                // server's tz-aware "today" key differs, refetch so the deals list matches what
+                // the (now updated) Today chip shows.
+                if resolvedTodayKey != selectedDayKey {
+                    selectedDayKey = resolvedTodayKey
+                    await loadOffers()
+                }
             }
         } catch {
             // Keep the locally-computed fallback days.
@@ -165,9 +215,9 @@ final class HomeViewModel: ObservableObject {
         }
         do throws(AppError) {
             let deals = try await getHomeDealsUseCase.execute(
-                latitude: currentCoordinate?.latitude,
-                longitude: currentCoordinate?.longitude,
-                categoryId: nil,
+                latitude: currentLocation?.latitude,
+                longitude: currentLocation?.longitude,
+                categoryId: selectedCategoryId,
                 discountFilter: selectedDiscountFilterKey,
                 day: selectedDayKey,
                 openNow: openNowOnly,
@@ -178,6 +228,7 @@ final class HomeViewModel: ObservableObject {
             )
             refreshErrorMessage = nil
             state = deals.isEmpty ? .empty : .loaded(deals.map { $0.toDealCard() })
+            mapPins = deals.compactMap { $0.toMapPin() }
         } catch {
             if isRefreshOfExistingContent {
                 refreshErrorMessage = error.displayMessage
@@ -232,6 +283,7 @@ extension HomeViewModel {
             getCurrentLocationUseCase: FakeGetCurrentLocationUseCase(),
             dealRepository: FakeDealRepository(),
             getDaysUseCase: FakeGetDaysUseCase(),
+            selectedLocationStore: FakeSelectedLocationStore(),
             deviceId: "preview-device"
         )
         vm.state = state
@@ -258,6 +310,11 @@ private struct FakeGetCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol 
     func execute() async throws(AppError) -> LocationSnapshot {
         LocationSnapshot(latitude: 64.1466, longitude: -21.9426, displayText: "Reykjavik, Iceland")
     }
+}
+
+private actor FakeSelectedLocationStore: SelectedLocationStoreProtocol {
+    func set(_ location: SelectedLocation) {}
+    func updates() -> AsyncStream<SelectedLocation> { AsyncStream { _ in } }
 }
 
 private struct FakeDealRepository: DealRepositoryProtocol {
