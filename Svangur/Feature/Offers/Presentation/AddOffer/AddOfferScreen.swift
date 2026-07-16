@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct AddOfferScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -11,9 +12,16 @@ struct AddOfferScreen: View {
     @State private var showCategorySheet = false
     @State private var showDiscountSheet = false
     @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var showCamera = false
+    @State private var showLibraryPicker = false
+    @State private var showPhotoSourceSheet = false
+    @State private var pendingPhotoSource: PhotoSource?
 
     @FocusState private var focusedField: Field?
     private enum Field: Hashable { case title, description }
+    private enum PhotoSource {
+        case camera, library
+    }
 
     init(viewModel: AddOfferViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -77,6 +85,34 @@ struct AddOfferScreen: View {
         }
         .onChange(of: photoSelection) { items in
             Task { await loadSelectedPhotos(items) }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera) { image in
+                handleCapturedImage(image)
+            }
+            .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $showLibraryPicker,
+            selection: $photoSelection,
+            maxSelectionCount: ValidateOfferDraftUseCase.maxImageCount - viewModel.displayImageUrls.count,
+            matching: .images
+        )
+        .sheet(isPresented: $showPhotoSourceSheet, onDismiss: presentPendingPhotoSource) {
+            PhotoSourcePickerSheet(
+                showCameraOption: UIImagePickerController.isSourceTypeAvailable(.camera),
+                onTakePhoto: {
+                    pendingPhotoSource = .camera
+                    showPhotoSourceSheet = false
+                },
+                onChooseFromGallery: {
+                    pendingPhotoSource = .library
+                    showPhotoSourceSheet = false
+                }
+            )
+            .presentationDetents([.height(320)])
+            .presentationDragIndicator(.visible)
+            .svPresentationCornerRadius(24)
         }
         .sheet(isPresented: $showCategorySheet) {
             CategoryPickerSheet(
@@ -195,11 +231,9 @@ struct AddOfferScreen: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
                     if viewModel.displayImageUrls.count < ValidateOfferDraftUseCase.maxImageCount {
-                        PhotosPicker(
-                            selection: $photoSelection,
-                            maxSelectionCount: ValidateOfferDraftUseCase.maxImageCount - viewModel.displayImageUrls.count,
-                            matching: .images
-                        ) {
+                        Button {
+                            showPhotoSourceSheet = true
+                        } label: {
                             Image("AddImages")
                                 .resizable()
                                 .scaledToFill()
@@ -420,6 +454,31 @@ struct AddOfferScreen: View {
             }
         }
         photoSelection.removeAll()
+    }
+
+    private func handleCapturedImage(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        viewModel.addImage(url)
+    }
+
+    private func presentPendingPhotoSource() {
+        guard let source = pendingPhotoSource else { return }
+        pendingPhotoSource = nil
+        Task { @MainActor in
+            // Presenting the next cover/sheet synchronously inside `onDismiss` races the
+            // "Add photo" sheet's own dismiss transition — the camera/library picker can
+            // render with the outgoing sheet's dimming still blended in. Give the dismiss
+            // animation time to fully settle first.
+            try? await Task.sleep(for: .milliseconds(350))
+            switch source {
+            case .camera: showCamera = true
+            case .library: showLibraryPicker = true
+            }
+        }
     }
 }
 

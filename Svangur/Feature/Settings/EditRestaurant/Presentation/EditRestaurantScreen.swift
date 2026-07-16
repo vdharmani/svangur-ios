@@ -8,6 +8,13 @@ struct EditRestaurantScreen: View {
     @StateObject var viewModel: EditRestaurantViewModel
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
+    @State private var showLibraryPicker = false
+    @State private var showPhotoSourceSheet = false
+    @State private var pendingPhotoSource: PhotoSource?
+
+    private enum PhotoSource {
+        case camera, library
+    }
 
     init(viewModel: EditRestaurantViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -53,6 +60,27 @@ struct EditRestaurantScreen: View {
                 saveImageData(data)
             }
             .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $showLibraryPicker,
+            selection: $photoSelection,
+            matching: .images
+        )
+        .sheet(isPresented: $showPhotoSourceSheet, onDismiss: presentPendingPhotoSource) {
+            PhotoSourcePickerSheet(
+                showCameraOption: UIImagePickerController.isSourceTypeAvailable(.camera),
+                onTakePhoto: {
+                    pendingPhotoSource = .camera
+                    showPhotoSourceSheet = false
+                },
+                onChooseFromGallery: {
+                    pendingPhotoSource = .library
+                    showPhotoSourceSheet = false
+                }
+            )
+            .presentationDetents([.height(320)])
+            .presentationDragIndicator(.visible)
+            .svPresentationCornerRadius(24)
         }
         .svSuccessFeedback(trigger: viewModel.state == .saved)
         .onChange(of: viewModel.state) { newState in
@@ -252,6 +280,22 @@ struct EditRestaurantScreen: View {
         }
     }
 
+    private func presentPendingPhotoSource() {
+        guard let source = pendingPhotoSource else { return }
+        pendingPhotoSource = nil
+        Task { @MainActor in
+            // Presenting the next cover/sheet synchronously inside `onDismiss` races the
+            // "Add photo" sheet's own dismiss transition — the camera/library picker can
+            // render with the outgoing sheet's dimming still blended in. Give the dismiss
+            // animation time to fully settle first.
+            try? await Task.sleep(for: .milliseconds(350))
+            switch source {
+            case .camera: showCamera = true
+            case .library: showLibraryPicker = true
+            }
+        }
+    }
+
     private func saveImageData(_ data: Data) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -366,17 +410,8 @@ struct EditRestaurantScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
-                    Menu {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button {
-                                showCamera = true
-                            } label: {
-                                Label("Take Photo", systemImage: "camera")
-                            }
-                        }
-                        PhotosPicker(selection: $photoSelection, matching: .images) {
-                            Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        }
+                    Button {
+                        showPhotoSourceSheet = true
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 24))

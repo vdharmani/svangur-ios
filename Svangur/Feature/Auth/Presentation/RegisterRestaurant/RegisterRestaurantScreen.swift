@@ -12,6 +12,9 @@ struct RegisterRestaurantScreen: View {
     @FocusState private var focusedField: Field?
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
+    @State private var showLibraryPicker = false
+    @State private var showPhotoSourceSheet = false
+    @State private var pendingPhotoSource: PhotoSource?
     @State private var showDocumentPicker = false
     @State private var currentStep: RegistrationStep = .basicInfo
     @State private var isPasswordVisible = false
@@ -24,6 +27,10 @@ struct RegisterRestaurantScreen: View {
     
     private enum RegistrationStep {
         case basicInfo, businessDetails
+    }
+
+    private enum PhotoSource {
+        case camera, library
     }
     
     init(viewModel: RegisterRestaurantViewModel) {
@@ -52,7 +59,7 @@ struct RegisterRestaurantScreen: View {
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
-                viewModel.setDocument(url)
+                handlePickedDocument(url)
             }
         }
         .onChange(of: photoSelection) { items in
@@ -63,6 +70,28 @@ struct RegisterRestaurantScreen: View {
                 handleCapturedImage(image)
             }
             .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $showLibraryPicker,
+            selection: $photoSelection,
+            maxSelectionCount: ValidateCredentialsUseCase.maxImageCount - viewModel.imageRefs.count,
+            matching: .images
+        )
+        .sheet(isPresented: $showPhotoSourceSheet, onDismiss: presentPendingPhotoSource) {
+            PhotoSourcePickerSheet(
+                showCameraOption: UIImagePickerController.isSourceTypeAvailable(.camera),
+                onTakePhoto: {
+                    pendingPhotoSource = .camera
+                    showPhotoSourceSheet = false
+                },
+                onChooseFromGallery: {
+                    pendingPhotoSource = .library
+                    showPhotoSourceSheet = false
+                }
+            )
+            .presentationDetents([.height(320)])
+            .presentationDragIndicator(.visible)
+            .svPresentationCornerRadius(24)
         }
         .overlay {
             if viewModel.state == .submitted {
@@ -275,19 +304,8 @@ struct RegisterRestaurantScreen: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
                     if viewModel.imageRefs.count < ValidateCredentialsUseCase.maxImageCount {
-                        Menu {
-                            if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                                Button {
-                                    showCamera = true
-                                } label: {
-                                    Label("Take Photo", systemImage: "camera")
-                                }
-                            }
-                            PhotosPicker(selection: $photoSelection,
-                                         maxSelectionCount: ValidateCredentialsUseCase.maxImageCount - viewModel.imageRefs.count,
-                                         matching: .images) {
-                                Label("Choose from Library", systemImage: "photo.on.rectangle")
-                            }
+                        Button {
+                            showPhotoSourceSheet = true
                         } label: {
                             Image("AddImages")
                                 .resizable()
@@ -753,7 +771,23 @@ struct RegisterRestaurantScreen: View {
     }
     
     // MARK: - Photo loader
-    
+
+    private func presentPendingPhotoSource() {
+        guard let source = pendingPhotoSource else { return }
+        pendingPhotoSource = nil
+        Task { @MainActor in
+            // Presenting the next cover/sheet synchronously inside `onDismiss` races the
+            // "Add photo" sheet's own dismiss transition — the camera/library picker can
+            // render with the outgoing sheet's dimming still blended in. Give the dismiss
+            // animation time to fully settle first.
+            try? await Task.sleep(for: .milliseconds(350))
+            switch source {
+            case .camera: showCamera = true
+            case .library: showLibraryPicker = true
+            }
+        }
+    }
+
     private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
         viewModel.clearImageSizeError()
         for item in items {
@@ -787,6 +821,27 @@ struct RegisterRestaurantScreen: View {
             .appendingPathExtension("jpg")
         guard (try? data.write(to: url, options: .atomic)) != nil else { return }
         viewModel.addImage(url)
+    }
+
+    // MARK: - Document loader
+
+    private func handlePickedDocument(_ pickedURL: URL) {
+        // `.fileImporter` can hand back a security-scoped URL (e.g. Files app, iCloud
+        // Drive). The scope is only guaranteed valid for the duration of this callback,
+        // not at submit time — so read the data now and copy it into an app-owned temp
+        // file, mirroring how picked photos are handled above.
+        let didStartAccessing = pickedURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                pickedURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        guard let data = try? Data(contentsOf: pickedURL) else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(pickedURL.pathExtension)
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        viewModel.setDocument(url)
     }
 }
 

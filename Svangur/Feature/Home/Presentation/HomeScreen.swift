@@ -801,10 +801,11 @@ struct HomeScreen: View {
                         HStack(spacing: 4) {
                             Image("BowlFood") // Match "Japanskt" icon style
                                 .font(.system(size: 10))
-                            Text(deal.restaurantName)
+                            Text(deal.categoryName)
                                 .font(SvFont.caption)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .foregroundStyle(Color.svSecondary)
                     }
@@ -819,8 +820,10 @@ struct HomeScreen: View {
                 Text(deal.title)
                     .font(SvFont.bodySmallStrong)
                     .foregroundStyle(Color.svLabel)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
 
                 Text(deal.validTimeText)

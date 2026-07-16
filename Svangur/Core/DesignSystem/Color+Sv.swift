@@ -17,4 +17,6 @@ import SwiftUI
 //   Color.svDivider           hairline dividers
 //   Color.svShimmer           skeleton / placeholder fill
 //   Color.svFieldBackground   text-field background
+//   Color.svPrimarySurface        subtle pink tint for row/card backgrounds
+//   Color.svPrimarySurfaceStrong  stronger pink tint for icon badge backgrounds
 //
