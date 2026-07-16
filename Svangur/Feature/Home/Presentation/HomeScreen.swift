@@ -764,22 +764,7 @@ struct HomeScreen: View {
     private func dealCard(from deal: DealCardUi) -> some View {
         HStack(spacing: 0) { // Set spacing to 0 to handle padding manually
             // MARK: - Left Image
-            AsyncImage(url: deal.imageUrl) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .empty, .failure:
-                    Image("SampleOfferBurgers")
-                        .resizable()
-                        .scaledToFill()
-                @unknown default:
-                    Image("SampleOfferBurgers")
-                        .resizable()
-                        .scaledToFill()
-                }
-            }
+            dealCardImage(url: deal.imageUrl)
             .frame(width: 130, height: 130) // Fixed height to maintain card consistency
             .clipShape(
                 UnevenRoundedRectangle(
@@ -843,6 +828,40 @@ struct HomeScreen: View {
                 )
                 .padding([.top, .trailing], 10)
         }
+    }
+
+    /// Shimmer while the offer image loads, crossfade to the real image on success,
+    /// and the bundled placeholder ONLY on failure. A nil URL goes straight to the
+    /// placeholder — `AsyncImage` would otherwise sit in `.empty` (shimmer) forever.
+    @ViewBuilder
+    private func dealCardImage(url: URL?) -> some View {
+        if let url {
+            AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.3))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                case .empty:
+                    Rectangle()
+                        .fill(Color.svShimmer)
+                        .svShimmer()
+                case .failure:
+                    dealCardImageFallback
+                @unknown default:
+                    dealCardImageFallback
+                }
+            }
+        } else {
+            dealCardImageFallback
+        }
+    }
+
+    private var dealCardImageFallback: some View {
+        Image("SampleOfferBurgers")
+            .resizable()
+            .scaledToFill()
     }
 
     // MARK: - Skeleton
