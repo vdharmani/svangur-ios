@@ -220,7 +220,9 @@ final class HomeViewModel: ObservableObject {
                 categoryId: selectedCategoryId,
                 discountFilter: selectedDiscountFilterKey,
                 day: selectedDayKey,
-                openNow: openNowOnly,
+                // The API's `open_now` semantics are inverted relative to the toggle:
+                // toggle ON → open_now=false, toggle OFF → open_now=true.
+                openNow: !openNowOnly,
                 lang: currentLang,
                 page: 1,
                 limit: 20,
