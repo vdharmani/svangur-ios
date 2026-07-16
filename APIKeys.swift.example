@@ -1,4 +1,0 @@
-// Copy this file to APIKeys.swift (gitignored) and fill in real keys locally.
-enum APIKeys {
-    static let googlePlaces = "YOUR_GOOGLE_PLACES_API_KEY"
-}

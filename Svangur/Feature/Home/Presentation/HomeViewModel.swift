@@ -220,9 +220,10 @@ final class HomeViewModel: ObservableObject {
                 categoryId: selectedCategoryId,
                 discountFilter: selectedDiscountFilterKey,
                 day: selectedDayKey,
-                // The API's `open_now` semantics are inverted relative to the toggle:
-                // toggle ON → open_now=false, toggle OFF → open_now=true.
-                openNow: !openNowOnly,
+                // The API's `open_now` semantics are inverted relative to the toggle,
+                // and `open_now=false` must be omitted entirely rather than sent:
+                // toggle ON → no param, toggle OFF → open_now=true.
+                openNow: openNowOnly ? nil : true,
                 lang: currentLang,
                 page: 1,
                 limit: 20,
@@ -300,7 +301,7 @@ private struct FakeGetHomeDealsUseCase: GetHomeDealsUseCaseProtocol {
         categoryId: String?,
         discountFilter: String,
         day: String?,
-        openNow: Bool,
+        openNow: Bool?,
         lang: String,
         page: Int,
         limit: Int,

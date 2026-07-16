@@ -316,30 +316,45 @@ struct HomeScreen: View {
 
             // MARK: - Right Content
             VStack(alignment: .leading, spacing: 4) {
+                // Name + subtitle share the row with the badge so text can never run under it
+                HStack(alignment: .top, spacing: SvSpacing.sm) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(pin.restaurantName)
+                            .font(SvFont.bodySmallStrong)
+                            .foregroundStyle(Color.svLabel)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                Text(pin.restaurantName)
-                    .font(SvFont.bodySmallStrong)
-                    .foregroundStyle(Color.svLabel)
+                        HStack(spacing: 4) {
+                            Image("BowlFood")
+                                .resizable()
+                                .frame(width: 12, height: 12)
 
-                HStack(spacing: 4) {
-                    Image("BowlFood")
-                        .resizable()
-                        .frame(width: 12, height: 12)
+                            Text("Burger Barn")
+                                .font(SvFont.caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .foregroundStyle(Color.svSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Burger Barn")
-                        .font(SvFont.caption)
+                    discountBadge(pin.discountBadge)
                 }
-                .foregroundStyle(Color.svSecondary)
 
                 Text(pin.title)
                     .font(SvFont.bodySmallStrong)
                     .foregroundStyle(Color.svLabel)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.top, 2)
 
                 Text(pin.validTimeText)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svSecondary)
+                    .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Image("MapPin")
@@ -348,15 +363,17 @@ struct HomeScreen: View {
 
                     Text(pin.distance)
                         .font(SvFont.caption)
+                        .lineLimit(1)
                 }
                 .foregroundStyle(Color.svSecondary)
             }
             .padding(.leading, SvSpacing.md)
+            .padding(.trailing, 10) // Same inset the badge overlay used from the card edge
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .frame(height: 130)
+        .frame(minHeight: 130)
         .background(
             RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                 .fill(Color.svOnPrimary)
@@ -367,20 +384,6 @@ struct HomeScreen: View {
                     y: 0
                 )
         )
-
-        // MARK: - Discount Badge
-        .overlay(alignment: .topTrailing) {
-            Text(pin.discountBadge)
-                .font(SvFont.captionStrong)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.svPrimary)
-                )
-                .padding([.top, .trailing], 10)
-        }
     }
 
     // MARK: - Food Categories
@@ -775,59 +778,79 @@ struct HomeScreen: View {
             
             // MARK: - Right Content
             VStack(alignment: .leading, spacing: 4) {
-                Text(deal.restaurantName)
-                    .font(SvFont.bodySmallStrong)
-                    .foregroundStyle(Color.svLabel)
-                
-                HStack(spacing: 4) {
-                    Image("BowlFood") // Match "Japanskt" icon style
-                        .font(.system(size: 10))
-                    Text(deal.restaurantName)
-                        .font(SvFont.caption)
+                // Name + subtitle share the row with the badge so text can never run under it
+                HStack(alignment: .top, spacing: SvSpacing.sm) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(deal.restaurantName)
+                            .font(SvFont.bodySmallStrong)
+                            .foregroundStyle(Color.svLabel)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 4) {
+                            Image("BowlFood") // Match "Japanskt" icon style
+                                .font(.system(size: 10))
+                            Text(deal.restaurantName)
+                                .font(SvFont.caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .foregroundStyle(Color.svSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    discountBadge(deal.discountBadge)
                 }
-                .foregroundStyle(Color.svSecondary)
-                
+
                 Text(deal.title)
                     .font(SvFont.bodySmallStrong)
                     .foregroundStyle(Color.svLabel)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.top, 2)
-                
+
                 Text(deal.validTimeText)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svSecondary)
-                
+                    .lineLimit(1)
+
                 HStack(spacing: 4) {
                     Image("MapPin")
                         .font(.system(size: 10))
                     Text(deal.distance)
                         .font(SvFont.caption)
+                        .lineLimit(1)
                 }
                 .foregroundStyle(Color.svSecondary)
             }
             .padding(.leading, SvSpacing.md)
+            .padding(.trailing, 10) // Same inset the badge overlay used from the card edge
             .frame(maxWidth: .infinity, alignment: .leading)
-            
-            Spacer()
+
+            Spacer(minLength: 0)
         }
         .background(
             RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                 .fill(Color.svOnPrimary)
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 0)
         )
-        // MARK: - Top Right Badge Overlay
-        .overlay(alignment: .topTrailing) {
-            Text(deal.discountBadge)
-                .font(SvFont.captionStrong)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.svPrimary)
-                )
-                .padding([.top, .trailing], 10)
-        }
+    }
+
+    // MARK: - Discount Badge
+    private func discountBadge(_ text: String) -> some View {
+        Text(text)
+            .font(SvFont.captionStrong)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.svPrimary)
+            )
+            .fixedSize() // Badge keeps its natural size — surrounding text yields instead
+            .layoutPriority(1)
     }
 
     /// Shimmer while the offer image loads, crossfade to the real image on success,

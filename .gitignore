@@ -1,0 +1,20 @@
+# Secrets — never commit
+Svangur/DebugSecret.xcconfig
+Svangur/releaseSecret.xcconfig
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SPM
+.build/
+
+# macOS
+.DS_Store

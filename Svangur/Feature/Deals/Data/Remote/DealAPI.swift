@@ -97,6 +97,17 @@ enum DealEndpoint: Endpoint {
         }
     }
 
+    /// The offers feed carries the device timezone so the backend can evaluate
+    /// day / open-now windows in the user's local time. Other cases keep the
+    /// protocol's default headers unchanged.
+    var headers: [String: String] {
+        var headers = ["Content-Type": "application/json", "Accept": "application/json"]
+        if case .listDeals = self {
+            headers["X-Timezone"] = TimeZone.current.identifier
+        }
+        return headers
+    }
+
     /// Public consumer-facing browsing endpoints — no owner Bearer token needed.
     var requiresAuth: Bool { false }
 }
