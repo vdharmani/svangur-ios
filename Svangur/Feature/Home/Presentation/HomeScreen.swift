@@ -341,7 +341,10 @@ struct HomeScreen: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    // Invisible twin of the pinned badge — reserves its exact width in the
+                    // text flow so the name/subtitle never enter the badge's corner area
                     discountBadge(pin.discountBadge)
+                        .hidden()
                 }
 
                 Text(pin.title)
@@ -368,8 +371,9 @@ struct HomeScreen: View {
                 .foregroundStyle(Color.svSecondary)
             }
             .padding(.leading, SvSpacing.md)
-            .padding(.trailing, 10) // Same inset the badge overlay used from the card edge
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 10) // Same inset the pinned badge keeps from the card edge
+            .padding(.vertical, 10) // Fixed top inset — identical whether the name is 1 or 2 lines
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             Spacer(minLength: 0)
         }
@@ -384,6 +388,11 @@ struct HomeScreen: View {
                     y: 0
                 )
         )
+        // MARK: - Pinned Discount Badge (drawn in the slot the hidden twin reserved)
+        .overlay(alignment: .topTrailing) {
+            discountBadge(pin.discountBadge)
+                .padding([.top, .trailing], 10)
+        }
     }
 
     // MARK: - Food Categories
@@ -801,7 +810,10 @@ struct HomeScreen: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    // Invisible twin of the pinned badge — reserves its exact width in the
+                    // text flow so the name/subtitle never enter the badge's corner area
                     discountBadge(deal.discountBadge)
+                        .hidden()
                 }
 
                 Text(deal.title)
@@ -826,16 +838,23 @@ struct HomeScreen: View {
                 .foregroundStyle(Color.svSecondary)
             }
             .padding(.leading, SvSpacing.md)
-            .padding(.trailing, 10) // Same inset the badge overlay used from the card edge
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 10) // Same inset the pinned badge keeps from the card edge
+            .padding(.vertical, 10) // Fixed top inset — identical whether the name is 1 or 2 lines
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             Spacer(minLength: 0)
         }
+        .frame(minHeight: 130)
         .background(
             RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                 .fill(Color.svOnPrimary)
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 0)
         )
+        // MARK: - Pinned Discount Badge (drawn in the slot the hidden twin reserved)
+        .overlay(alignment: .topTrailing) {
+            discountBadge(deal.discountBadge)
+                .padding([.top, .trailing], 10)
+        }
     }
 
     // MARK: - Discount Badge
