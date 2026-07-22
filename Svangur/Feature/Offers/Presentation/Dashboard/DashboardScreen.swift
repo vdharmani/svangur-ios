@@ -282,7 +282,7 @@ struct DashboardScreen: View {
     private func offerCard(_ offer: OfferUi) -> some View {
         VStack(alignment: .leading, spacing: SvSpacing.xl) {
             Button {
-                router.navigate(to: .dealDetail(dealId: offer.id))
+                router.navigate(to: .offerDetail(offerId: offer.id))
             } label: {
                 HStack(alignment: .top, spacing: SvSpacing.lg) {
                     offerImage(offer)

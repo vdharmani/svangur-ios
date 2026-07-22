@@ -300,7 +300,7 @@ struct HomeScreen: View {
     }
 
     private func mapDealCard(_ pin: DealMapPin) -> some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
 
             // MARK: - Left Image
             Image(pin.categoryImageName)
@@ -373,7 +373,7 @@ struct HomeScreen: View {
             .padding(.leading, SvSpacing.md)
             .padding(.trailing, 10) // Same inset the pinned badge keeps from the card edge
             .padding(.vertical, 10) // Fixed top inset — identical whether the name is 1 or 2 lines
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
         }

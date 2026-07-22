@@ -1,27 +1,21 @@
 import Foundation
 
-extension Offer {
+extension DealListing {
     func toDealDetail() -> DealDetailUi {
-        let sortedDays = validDays.sorted()
-        let dayNames = sortedDays.map { $0.shortName }
-
-        let mockRestaurants = [
-            "Bella Italia", "Pizza Palace", "The Golden Fork",
-            "Burger Joint", "Sweet Bites"
-        ]
-        let mockCategories = ["Italian", "American", "European", "Mexican", "Japanese"]
-        let idx = Int(id - 1) % mockRestaurants.count
+        let dayNames = validDays
+            .sorted()
+            .compactMap { Weekday(rawValue: $0 + 1)?.shortName }
 
         return DealDetailUi(
-            id: id,
-            restaurantName: mockRestaurants[idx],
-            categoryLabel: mockCategories[idx],
-            discountBadge: discountDisplayText,
-            description: descriptionEn ?? "",
+            id: Int64(id) ?? 0,
+            restaurantName: restaurantName ?? "",
+            categoryLabel: categoryName ?? "",
+            discountBadge: customDiscountText ?? "",
+            description: description ?? "",
             validDays: dayNames,
-            validTimeText: "\(validTimeStart.formatted24h)\u{2013}\(validTimeEnd.formatted24h)",
-            heroImageName: "SampleOfferPizza",
-            photoImageNames: ["SampleOfferPizza", "SampleOfferBurgers", "SampleFoodThumb"]
+            validTimeText: "\(dealCardTime(validTimeStart))\u{2013}\(dealCardTime(validTimeEnd))",
+            heroImageUrl: heroImageUrl.flatMap(URL.init(string:)),
+            photoImageUrls: imageUrls.compactMap(URL.init(string:))
         )
     }
 }

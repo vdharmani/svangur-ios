@@ -72,11 +72,24 @@ struct SearchScreen: View {
         switch viewModel.state {
         case .idle:
             recentSearchesView
+        case .searching:
+            searchingView
         case .noResults(let query):
             noResultsView(query: query)
         case .results(let results):
             searchResultsView(results)
+        case .error(let message):
+            errorView(message: message)
         }
+    }
+
+    private var searchingView: some View {
+        VStack {
+            Spacer()
+            ProgressView()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Recent Searches (Screen 1)
@@ -170,7 +183,45 @@ struct SearchScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, SvSpacing.screenPadding)
     }
-    
+
+    // MARK: - Error
+
+    private func errorView(message: String) -> some View {
+        VStack(spacing: SvSpacing.xl) {
+            Spacer()
+
+            Image("ic_maginfyingGlass")
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 250, height: 180)
+
+            VStack(spacing: SvSpacing.sm) {
+                Text("Something went wrong")
+                    .font(SvFont.titleSmall)
+                    .foregroundStyle(Color.svLabel)
+                    .multilineTextAlignment(.center)
+
+                Text(message)
+                    .font(SvFont.caption)
+                    .foregroundStyle(Color.svSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, SvSpacing.xxl)
+
+                Button("Try again") {
+                    viewModel.submitSearch()
+                }
+                .font(SvFont.bodySmallStrong)
+                .foregroundStyle(Color.svPrimary)
+            }
+
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, SvSpacing.screenPadding)
+    }
+
     // MARK: - Search Results (Screen 3)
     
     private func searchResultsView(_ results: [SearchResultUi]) -> some View {
@@ -290,6 +341,24 @@ struct SearchScreen: View {
 #Preview("Search - Initial") {
     NavigationStack {
         SearchScreen(viewModel: .previewInstance())
+    }
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+}
+
+#Preview("Search - Searching") {
+    NavigationStack {
+        SearchScreen(viewModel: .previewInstance(state: .searching))
+    }
+    .environmentObject(AppRouter())
+    .environmentObject(UserSession(authRepository: MockAuthRepository()))
+}
+
+#Preview("Search - Error") {
+    NavigationStack {
+        SearchScreen(viewModel: .previewInstance(
+            state: .error(message: "Couldn't load results. Check your connection and try again.")
+        ))
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))

@@ -3,9 +3,7 @@ import SwiftUI
 struct DealDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var router: AppRouter
     @StateObject var viewModel: DealDetailViewModel
-    @State private var showDeleteConfirmation = false
 
     init(viewModel: DealDetailViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -20,19 +18,21 @@ struct DealDetailScreen: View {
 
     @ViewBuilder
     private func compactLayout() -> some View {
-        Group {
-            switch viewModel.state {
-            case .idle:
-                Color.clear
+        GeometryReader { geo in
+            Group {
+                switch viewModel.state {
+                case .idle:
+                    Color.clear
 
-            case .loading:
-                loadingState
+                case .loading:
+                    loadingState
 
-            case .loaded(let deal):
-                dealContent(deal)
+                case .loaded(let deal):
+                    dealContent(deal, containerHeight: geo.size.height)
 
-            case .error(let message):
-                errorState(message)
+                case .error(let message):
+                    errorState(message)
+                }
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -43,47 +43,20 @@ struct DealDetailScreen: View {
     // MARK: - Loaded Content
 
     @ViewBuilder
-    private func dealContent(_ deal: DealDetailUi) -> some View {
+    private func dealContent(_ deal: DealDetailUi, containerHeight: CGFloat) -> some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 heroSection(deal)
-                statsRow
-                    .padding(.top, SvSpacing.lg)
                 aboutSection(deal)
                     .padding(.top, SvSpacing.sectionSpacing)
                 validOnSection(deal)
                     .padding(.top, SvSpacing.sectionSpacing)
-                photosSection(deal)
+                photosSection(deal, containerHeight: containerHeight)
                     .padding(.top, SvSpacing.sectionSpacing)
                 Spacer(minLength: SvSpacing.xxxl)
             }
         }
         .ignoresSafeArea(.container, edges: .top)
-        .safeAreaInset(edge: .bottom) {
-            bottomActionBar
-        }
-        .blur(radius: showDeleteConfirmation ? 2 : 0)
-        .overlay {
-            if showDeleteConfirmation {
-                SvConfirmationDialog(
-                    iconName: "DeleteOffer",
-                    title: "Delete Offer",
-                    message: "Are you sure you want to delete this offer?",
-                    primaryTitle: "Cancel",
-                    secondaryTitle: "Delete",
-                    onPrimary: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showDeleteConfirmation = false
-                        }
-                    },
-                    onSecondary: {
-                        showDeleteConfirmation = false
-                        // TODO: wire to viewModel.onDelete() when the use case is added
-                    }
-                )
-                .transition(.opacity)
-            }
-        }
     }
 
     // MARK: - Hero Section (image + overlaid title + floating chips)
@@ -105,9 +78,7 @@ struct DealDetailScreen: View {
             .frame(maxWidth: .infinity)
             .frame(height: 320)
             .overlay {
-                Image(deal.heroImageName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                remoteImage(deal.heroImageUrl)
             }
             .overlay(alignment: .bottom) {
                 LinearGradient(
@@ -193,62 +164,6 @@ struct DealDetailScreen: View {
         .accessibilityLabel(label)
     }
 
-    // MARK: - Stats Row
-    // Placeholder values — extend DealDetailUi with views/clicks/trends when
-    // the analytics model is wired up.
-
-    @ViewBuilder
-    private var statsRow: some View {
-        HStack(spacing: SvSpacing.md) {
-            statsCard(
-                label: "VIEWS",
-                value: "1,245",
-                trendIcon: "arrow.up.right",
-                trendText: "+12% vs last week",
-                trendColor: Color.svTrendUp
-            )
-            statsCard(
-                label: "CLICKS",
-                value: "158",
-                trendIcon: "arrow.down.right",
-                trendText: "-6% vs last deal",
-                trendColor: Color.svTrendDown
-            )
-        }
-        .padding(.horizontal, 20)
-    }
-
-    private func statsCard(
-        label: String,
-        value: String,
-        trendIcon: String,
-        trendText: String,
-        trendColor: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: SvSpacing.sm) {
-            Text(label)
-                .font(SvFont.captionStrong)
-                .foregroundStyle(Color.svSecondary)
-                .tracking(1)
-
-            Text(value)
-                .font(.system(size: 28, weight: .bold, design: .default))
-                .foregroundStyle(Color.svOnBackground)
-
-            HStack(spacing: SvSpacing.xs) {
-                Image(systemName: trendIcon)
-                    .font(.system(size: 11, weight: .bold))
-                Text(trendText)
-                    .font(SvFont.caption)
-            }
-            .foregroundStyle(trendColor)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(SvSpacing.lg)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: SvSpacing.cardRadius))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-    }
-
     // MARK: - About Section
 
     @ViewBuilder
@@ -277,17 +192,21 @@ struct DealDetailScreen: View {
         VStack(alignment: .leading, spacing: SvSpacing.md) {
             sectionHeader("Valid On")
 
-            HStack(spacing: SvSpacing.sm) {
-                ForEach(deal.validDays, id: \.self) { day in
-                    Text(day)
-                        .font(SvFont.bodySmallStrong)
-                        .foregroundStyle(Color.svOnBackground)
-                        .padding(.horizontal, SvSpacing.lg)
-                        .padding(.vertical, SvSpacing.sm)
-                        .background(
-                            Color.svFieldBackground,
-                            in: RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                        )
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SvSpacing.sm) {
+                    ForEach(deal.validDays, id: \.self) { day in
+                        Text(day)
+                            .font(SvFont.bodySmallStrong)
+                            .foregroundStyle(Color.svOnBackground)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, SvSpacing.lg)
+                            .padding(.vertical, SvSpacing.sm)
+                            .background(
+                                Color.svFieldBackground,
+                                in: RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                            )
+                    }
                 }
             }
         }
@@ -297,45 +216,70 @@ struct DealDetailScreen: View {
     // MARK: - Photos Section
 
     @ViewBuilder
-    private func photosSection(_ deal: DealDetailUi) -> some View {
-        VStack(alignment: .leading, spacing: SvSpacing.md) {
-            sectionHeader("Photos")
+    private func photosSection(_ deal: DealDetailUi, containerHeight: CGFloat) -> some View {
+        if !deal.photoImageUrls.isEmpty {
+            VStack(alignment: .leading, spacing: SvSpacing.md) {
+                sectionHeader("Photos")
 
-            if deal.photoImageNames.count >= 3 {
-                GeometryReader { geo in
-                    let spacing: CGFloat = SvSpacing.sm
-                    let rightWidth = (geo.size.width - 2 * spacing) / 3
-                    let leftWidth = geo.size.width - rightWidth - spacing
-
-                    HStack(spacing: spacing) {
-                        photoTile(deal.photoImageNames[0], height: leftWidth)
-                            .frame(width: leftWidth)
-
-                        VStack(spacing: spacing) {
-                            photoTile(deal.photoImageNames[1], height: rightWidth)
-                                .frame(width: rightWidth)
-                            photoTile(deal.photoImageNames[2], height: rightWidth)
-                                .frame(width: rightWidth)
+                if deal.photoImageUrls.count == 1 {
+                    photoTile(deal.photoImageUrls[0], height: containerHeight * 0.5)
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: SvSpacing.sm), GridItem(.flexible())],
+                        spacing: SvSpacing.sm
+                    ) {
+                        ForEach(deal.photoImageUrls, id: \.self) { url in
+                            photoTile(url, height: containerHeight * 0.25)
                         }
                     }
                 }
-                .aspectRatio(3 / 2, contentMode: .fit)
             }
+            .padding(.horizontal, 20)
         }
-        .padding(.horizontal, 20)
     }
 
     @ViewBuilder
-    private func photoTile(_ name: String, height: CGFloat) -> some View {
+    private func photoTile(_ url: URL, height: CGFloat) -> some View {
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .overlay {
-                Image(name)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                remoteImage(url)
             }
             .clipShape(RoundedRectangle(cornerRadius: SvSpacing.cardRadius))
+    }
+
+    // MARK: - Remote Image (shimmer while loading, bundled fallback on failure)
+
+    @ViewBuilder
+    private func remoteImage(_ url: URL?) -> some View {
+        if let url {
+            AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.3))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .transition(.opacity)
+                case .empty:
+                    Rectangle()
+                        .fill(Color.svShimmer)
+                        .svShimmer()
+                case .failure:
+                    dealImageFallback
+                @unknown default:
+                    dealImageFallback
+                }
+            }
+        } else {
+            dealImageFallback
+        }
+    }
+
+    private var dealImageFallback: some View {
+        Image("SampleOfferBurgers")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
     }
 
     // MARK: - Section Header (title + trailing hairline)
@@ -350,48 +294,6 @@ struct DealDetailScreen: View {
                 .fill(Color.svDivider)
                 .frame(height: 1)
         }
-    }
-
-    // MARK: - Bottom Action Bar
-
-    @ViewBuilder
-    private var bottomActionBar: some View {
-        HStack(spacing: SvSpacing.md) {
-            SvPrimaryButton(title: "Edit") {
-                router.navigate(to: .editOffer(offerId: viewModel.dealId))
-            }
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showDeleteConfirmation = true
-                }
-            } label: {
-                Text("Delete")
-                    .font(SvFont.buttonLabel)
-                    .foregroundStyle(Color.svOnBackground)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: SvSpacing.buttonHeight)
-                    .background(
-                        Color.svFieldBackground,
-                        in: RoundedRectangle(cornerRadius: SvSpacing.buttonRadius)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, SvSpacing.lg)
-        .padding(.bottom, SvSpacing.md)
-        .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 24,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 24
-            )
-            .fill(Color.white)
-            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: -4)
-            .ignoresSafeArea(.container, edges: .bottom)
-        )
     }
 
     // MARK: - Loading State
@@ -447,13 +349,6 @@ struct DealDetailScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
-
-// Local trend tokens — promote to Color.svTrendUp / svTrendDown in the Asset
-// Catalog when the design system gains a status-color palette.
-private extension Color {
-    static let svTrendUp   = Color(red: 0.13, green: 0.59, blue: 0.36)
-    static let svTrendDown = Color(red: 0.91, green: 0.27, blue: 0.31)
 }
 
 // MARK: - Previews

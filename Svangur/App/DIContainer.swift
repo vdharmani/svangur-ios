@@ -130,10 +130,6 @@ final class DIContainer: Sendable {
 
     // MARK: - Feature: Home
 
-    func makeGetNearbyOffersUseCase() -> GetNearbyOffersUseCaseProtocol {
-        GetNearbyOffersUseCase(offerRepository: makeOfferRepository())
-    }
-
     func makeGetHomeDealsUseCase() -> GetHomeDealsUseCaseProtocol {
         GetHomeDealsUseCase(dealRepository: makeDealRepository())
     }
@@ -156,7 +152,10 @@ final class DIContainer: Sendable {
 
     @MainActor
     func makeSearchViewModel() -> SearchViewModel {
-        SearchViewModel(getNearbyOffersUseCase: makeGetNearbyOffersUseCase())
+        SearchViewModel(
+            searchOffersUseCase: makeSearchOffersUseCase(),
+            getCurrentLocationUseCase: makeGetCurrentLocationUseCase()
+        )
     }
 
     @MainActor
@@ -182,9 +181,13 @@ final class DIContainer: Sendable {
         )
     }
 
+    func makeGetDealDetailUseCase() -> GetDealDetailUseCaseProtocol {
+        GetDealDetailUseCase(dealRepository: makeDealRepository())
+    }
+
     @MainActor
     func makeDealDetailViewModel(dealId: Int64) -> DealDetailViewModel {
-        DealDetailViewModel(dealId: dealId, getOfferUseCase: makeGetOfferUseCase())
+        DealDetailViewModel(dealId: dealId, getDealDetailUseCase: makeGetDealDetailUseCase())
     }
 
     // MARK: - Feature: Profile
@@ -290,6 +293,10 @@ final class DIContainer: Sendable {
 
     func makeSearchResultsRepository() -> SearchResultsRepositoryProtocol {
         SearchResultsRepositoryImpl(apiClient: apiClient)
+    }
+
+    func makeSearchOffersUseCase() -> SearchOffersUseCaseProtocol {
+        SearchOffersUseCase(searchResultsRepository: makeSearchResultsRepository())
     }
 
     // MARK: - Feature: Days

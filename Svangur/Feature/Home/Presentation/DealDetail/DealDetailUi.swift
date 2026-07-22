@@ -8,6 +8,6 @@ struct DealDetailUi: Equatable, Sendable, Identifiable {
     let description: String
     let validDays: [String]
     let validTimeText: String
-    let heroImageName: String
-    let photoImageNames: [String]
+    let heroImageUrl: URL?
+    let photoImageUrls: [URL]
 }

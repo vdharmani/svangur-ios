@@ -11,28 +11,39 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var state: SearchUiState = .idle
     @Published private(set) var recentSearches: [String] = []
 
-    private let getNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol
-    @Published private var allOffers: [Offer] = []
-    @Published private var searchTask: Task<Void, Never>?
-    @Published private var hasLoadedOffers = false
+    private let searchOffersUseCase: SearchOffersUseCaseProtocol
+    private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
+    private var currentLocation: LocationSnapshot?
+
+    /// `nonisolated(unsafe)`: only ever mutated from `@MainActor` methods, except for the
+    /// `cancel()` call in `deinit` — see `SelectLocationViewModel.searchTask` for the same
+    /// pattern and rationale.
+    nonisolated(unsafe) private var searchTask: Task<Void, Never>?
 
     private static let recentSearchesKey = "recent_searches"
     private static let maxRecentSearches = 10
 
-    init(getNearbyOffersUseCase: GetNearbyOffersUseCaseProtocol) {
-        self.getNearbyOffersUseCase = getNearbyOffersUseCase
+    init(
+        searchOffersUseCase: SearchOffersUseCaseProtocol,
+        getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
+    ) {
+        self.searchOffersUseCase = searchOffersUseCase
+        self.getCurrentLocationUseCase = getCurrentLocationUseCase
         self.recentSearches = Self.loadRecentSearches()
+    }
+
+    deinit {
+        searchTask?.cancel()
     }
 
     // MARK: - Lifecycle
 
     func onAppear() async {
-        guard !hasLoadedOffers else { return }
+        guard currentLocation == nil else { return }
         do throws(AppError) {
-            allOffers = try await getNearbyOffersUseCase.execute()
-            hasLoadedOffers = true
+            currentLocation = try await getCurrentLocationUseCase.execute()
         } catch {
-            allOffers = []
+            currentLocation = nil
         }
     }
 
@@ -51,53 +62,50 @@ final class SearchViewModel: ObservableObject {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         addToRecentSearches(trimmed)
-        performSearch(trimmed)
+        searchTask?.cancel()
+        state = .searching
+        searchTask = Task { [weak self] in
+            await self?.performSearch(trimmed)
+        }
     }
 
     // MARK: - Private
 
     private func scheduleSearch() {
         searchTask?.cancel()
-        let currentQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !currentQuery.isEmpty else {
+        guard !trimmed.isEmpty else {
             state = .idle
             return
         }
 
-        guard currentQuery.count >= 2 else { return }
+        guard trimmed.count >= 2 else { return }
 
-        searchTask = Task {
+        state = .searching
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            performSearch(currentQuery)
+            await self?.performSearch(trimmed)
         }
     }
 
-    private func performSearch(_ searchText: String) {
-        let lowered = searchText.lowercased()
-        let mockNames = ["Pizza Palace", "Burger Joint", "Sweet Bites", "Noodle House", "Taco Town",
-                         "Napoli Crust", "Firewood Pizza Co.", "Urban Bite", "Bistro 21", "Eat Street"]
-
-        // NOTE (forced minimal fix — Offer reshape, see Feature/Offers): `Offer.category` no
-        // longer exists (the backend uses a dynamic `categoryId`, not a closed enum with a
-        // display-name key), so the category-name search clause was dropped. `Offer.status`
-        // is no longer directly comparable to `.active` — use the separate `isActive` flag.
-        let filtered = allOffers
-            .filter { $0.isActive }
-            .filter {
-                $0.titleEn.lowercased().contains(lowered) ||
-                ($0.descriptionEn ?? "").lowercased().contains(lowered)
-            }
-
-        let results = filtered.enumerated().map { idx, offer in
-            offer.toSearchResult(
-                restaurantName: mockNames[idx % mockNames.count],
-                distance: String(format: "%.1f km", Double.random(in: 0.3...5.0))
+    private func performSearch(_ searchText: String) async {
+        do throws(AppError) {
+            let offers = try await searchOffersUseCase.execute(
+                query: searchText,
+                lat: currentLocation?.latitude,
+                lng: currentLocation?.longitude
             )
+            // The user may have kept typing (or cleared the field) while this request was in
+            // flight — only apply results that still match the current text.
+            guard !Task.isCancelled, searchText == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            let results = offers.map { $0.toUi() }
+            state = results.isEmpty ? .noResults(query: searchText) : .results(results)
+        } catch {
+            guard !Task.isCancelled, searchText == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            state = .error(message: error.displayMessage)
         }
-
-        state = results.isEmpty ? .noResults(query: searchText) : .results(results)
     }
 
     private func addToRecentSearches(_ text: String) {
@@ -121,34 +129,6 @@ final class SearchViewModel: ObservableObject {
     }
 }
 
-// MARK: - Offer → SearchResultUi Mapper
-
-private extension Offer {
-    func toSearchResult(restaurantName: String, distance: String) -> SearchResultUi {
-        let daysText: String
-        if validDays.count == 7 {
-            daysText = "Mon - Sun"
-        } else {
-            let sorted = validDays.sorted()
-            if let first = sorted.first, let last = sorted.last {
-                daysText = "\(first.shortName) - \(last.shortName)"
-            } else {
-                daysText = ""
-            }
-        }
-
-        let timeRange = "\(validTimeStart.formatted24h) - \(validTimeEnd.formatted24h)"
-
-        return SearchResultUi(
-            id: id,
-            restaurantName: restaurantName,
-            dealTitle: titleEn,
-            distanceAndTime: "\(distance) \u{2022} \(daysText) \(timeRange)",
-            imageUrl: imageUrls.first
-        )
-    }
-}
-
 // MARK: - Preview Factory
 
 extension SearchViewModel {
@@ -158,7 +138,8 @@ extension SearchViewModel {
         recentSearches: [String] = ["Bistro 21", "Urban Bite", "Eat Street"]
     ) -> SearchViewModel {
         let vm = SearchViewModel(
-            getNearbyOffersUseCase: FakeSearchOffersUseCase()
+            searchOffersUseCase: FakeSearchOffersUseCase(),
+            getCurrentLocationUseCase: FakeGetCurrentLocationUseCase()
         )
         vm.state = state
         vm.recentSearches = recentSearches
@@ -166,6 +147,12 @@ extension SearchViewModel {
     }
 }
 
-private struct FakeSearchOffersUseCase: GetNearbyOffersUseCaseProtocol {
-    func execute() async throws(AppError) -> [Offer] { [] }
+private struct FakeSearchOffersUseCase: SearchOffersUseCaseProtocol {
+    func execute(query: String, lat: Double?, lng: Double?) async throws(AppError) -> [SearchOffer] { [] }
+}
+
+private struct FakeGetCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol {
+    func execute() async throws(AppError) -> LocationSnapshot {
+        LocationSnapshot(latitude: 0, longitude: 0, displayText: "Preview")
+    }
 }
