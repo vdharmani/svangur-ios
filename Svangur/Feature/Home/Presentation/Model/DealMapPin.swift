@@ -7,7 +7,7 @@ struct DealMapPin: Identifiable, Equatable, Sendable {
     let restaurantName: String
     let title: String
     let discountBadge: String
-    let categoryImageName: String
+    let imageUrl: URL?
     let validTimeText: String
     let distance: String
 }
@@ -21,7 +21,7 @@ extension DealMapPin {
             restaurantName: "Bello Italio",
             title: "20% off sushi platters",
             discountBadge: "20%",
-            categoryImageName: "SampleOfferPizza",
+            imageUrl: nil,
             validTimeText: "Tue – Fri 17:00 – 21:00",
             distance: "1.2 km"
         ),
@@ -32,7 +32,7 @@ extension DealMapPin {
             restaurantName: "Burger Barn",
             title: "2-for-1 burgers",
             discountBadge: "2-for-1",
-            categoryImageName: "SampleOfferBurgers",
+            imageUrl: nil,
             validTimeText: "Mon – Thu 11:30 – 14:00",
             distance: "0.8 km"
         ),
@@ -43,7 +43,7 @@ extension DealMapPin {
             restaurantName: "Pizza Palace",
             title: "30% off all pizzas",
             discountBadge: "30%",
-            categoryImageName: "SampleOfferPizza",
+            imageUrl: nil,
             validTimeText: "Wed 11:00 – 22:00",
             distance: "2.1 km"
         ),
@@ -54,7 +54,7 @@ extension DealMapPin {
             restaurantName: "Masti Shakes",
             title: "Free dessert with main",
             discountBadge: "Free",
-            categoryImageName: "SampleFoodThumb",
+            imageUrl: nil,
             validTimeText: "Fri – Sat 18:00 – 22:00",
             distance: "1.5 km"
         ),
@@ -65,7 +65,7 @@ extension DealMapPin {
             restaurantName: "Noodle House",
             title: "25% off ramen bowls",
             discountBadge: "25%",
-            categoryImageName: "SampleFoodThumb",
+            imageUrl: nil,
             validTimeText: "Every day 12:00 – 15:00",
             distance: "3.0 km"
         ),

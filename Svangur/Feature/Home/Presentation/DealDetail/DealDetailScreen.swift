@@ -3,6 +3,7 @@ import SwiftUI
 struct DealDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @StateObject var viewModel: DealDetailViewModel
 
     init(viewModel: DealDetailViewModel) {
@@ -18,21 +19,19 @@ struct DealDetailScreen: View {
 
     @ViewBuilder
     private func compactLayout() -> some View {
-        GeometryReader { geo in
-            Group {
-                switch viewModel.state {
-                case .idle:
-                    Color.clear
+        Group {
+            switch viewModel.state {
+            case .idle:
+                Color.clear
 
-                case .loading:
-                    loadingState
+            case .loading:
+                loadingState
 
-                case .loaded(let deal):
-                    dealContent(deal, containerHeight: geo.size.height)
+            case .loaded(let deal):
+                dealContent(deal)
 
-                case .error(let message):
-                    errorState(message)
-                }
+            case .error(let message):
+                errorState(message)
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -43,7 +42,7 @@ struct DealDetailScreen: View {
     // MARK: - Loaded Content
 
     @ViewBuilder
-    private func dealContent(_ deal: DealDetailUi, containerHeight: CGFloat) -> some View {
+    private func dealContent(_ deal: DealDetailUi) -> some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 heroSection(deal)
@@ -51,10 +50,11 @@ struct DealDetailScreen: View {
                     .padding(.top, SvSpacing.sectionSpacing)
                 validOnSection(deal)
                     .padding(.top, SvSpacing.sectionSpacing)
-                photosSection(deal, containerHeight: containerHeight)
+                photosSection(deal)
                     .padding(.top, SvSpacing.sectionSpacing)
                 Spacer(minLength: SvSpacing.xxxl)
             }
+            .svNoScrollBounce()
         }
         .ignoresSafeArea(.container, edges: .top)
     }
@@ -145,18 +145,55 @@ struct DealDetailScreen: View {
                 .background(Color.white, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
 
-            actionChip(icon: "mappin.and.ellipse", label: "Location")
-            actionChip(icon: "globe", label: "Website")
-            actionChip(icon: "phone.fill", label: "Call")
+            if let latitude = deal.latitude, let longitude = deal.longitude {
+                actionChip(image: "MapPinArea", label: "Location") {
+                    openInMaps(latitude: latitude, longitude: longitude, name: deal.restaurantName)
+                }
+            }
+
+            if let phone = deal.phone, !phone.isEmpty {
+                actionChip(systemImage: "phone.fill", label: "Call") {
+                    call(phone)
+                }
+            }
+        }
+    }
+
+    private func openInMaps(latitude: Double, longitude: Double, name: String) {
+        let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        guard let url = URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)&q=\(encodedName)") else { return }
+        openURL(url)
+    }
+
+    private func call(_ phone: String) {
+        let digits = phone.filter { $0.isNumber || $0 == "+" }
+        guard !digits.isEmpty, let url = URL(string: "tel://\(digits)") else { return }
+        openURL(url)
+    }
+
+    @ViewBuilder
+    private func actionChip(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        actionChip(label: label, action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.svPrimary)
         }
     }
 
     @ViewBuilder
-    private func actionChip(icon: String, label: String) -> some View {
-        Button { } label: {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.svPrimary)
+    private func actionChip(image: String, label: String, action: @escaping () -> Void) -> some View {
+        actionChip(label: label, action: action) {
+            Image(image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+        }
+    }
+
+    @ViewBuilder
+    private func actionChip(label: String, action: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
+        Button(action: action) {
+            icon()
                 .frame(width: 44, height: 44)
                 .background(Color.white, in: Circle())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
@@ -216,23 +253,52 @@ struct DealDetailScreen: View {
     // MARK: - Photos Section
 
     @ViewBuilder
-    private func photosSection(_ deal: DealDetailUi, containerHeight: CGFloat) -> some View {
+    private func photosSection(_ deal: DealDetailUi) -> some View {
         if !deal.photoImageUrls.isEmpty {
             VStack(alignment: .leading, spacing: SvSpacing.md) {
                 sectionHeader("Photos")
 
-                if deal.photoImageUrls.count == 1 {
-                    photoTile(deal.photoImageUrls[0], height: containerHeight * 0.5)
-                } else {
-                    LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: SvSpacing.sm), GridItem(.flexible())],
-                        spacing: SvSpacing.sm
-                    ) {
-                        ForEach(deal.photoImageUrls, id: \.self) { url in
-                            photoTile(url, height: containerHeight * 0.25)
+                GeometryReader { geo in
+                    let spacing: CGFloat = SvSpacing.sm
+                    let rightWidth = (geo.size.width - 2 * spacing) / 3
+                    let leftWidth = geo.size.width - rightWidth - spacing
+
+                    switch deal.photoImageUrls.count {
+                    case 1:
+                        // Same size/shape as the "big" tile below — left-aligned, blank
+                        // margin on the right rather than stretched full-width.
+                        HStack(spacing: spacing) {
+                            photoTile(deal.photoImageUrls[0], height: leftWidth)
+                                .frame(width: leftWidth)
+                            Spacer(minLength: 0)
+                        }
+
+                    case 2:
+                        // Big tile + one on the right spanning the full row height.
+                        HStack(spacing: spacing) {
+                            photoTile(deal.photoImageUrls[0], height: geo.size.height)
+                                .frame(width: leftWidth)
+                            photoTile(deal.photoImageUrls[1], height: geo.size.height)
+                                .frame(width: rightWidth)
+                        }
+
+                    default:
+                        // Big tile + the next two stacked on the right. Extras beyond the
+                        // first 3 aren't shown — matches the reference design.
+                        HStack(spacing: spacing) {
+                            photoTile(deal.photoImageUrls[0], height: leftWidth)
+                                .frame(width: leftWidth)
+
+                            VStack(spacing: spacing) {
+                                photoTile(deal.photoImageUrls[1], height: rightWidth)
+                                    .frame(width: rightWidth)
+                                photoTile(deal.photoImageUrls[2], height: rightWidth)
+                                    .frame(width: rightWidth)
+                            }
                         }
                     }
                 }
+                .aspectRatio(3 / 2, contentMode: .fit)
             }
             .padding(.horizontal, 20)
         }

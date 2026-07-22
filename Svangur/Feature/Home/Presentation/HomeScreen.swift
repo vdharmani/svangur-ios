@@ -194,7 +194,9 @@ struct HomeScreen: View {
     // MARK: - Map View
 
     private var mapContent: some View {
-        ZStack(alignment: .bottom) {
+        let clusters = MapCluster.clustering(viewModel.mapPins, region: mapRegion)
+
+        return ZStack(alignment: .bottom) {
             Group {
                 if #available(iOS 17, *) {
                     // `MapCameraPosition` is iOS 17+ only, so it can't back a stored property on
@@ -208,17 +210,24 @@ struct HomeScreen: View {
                             }
                         }
                     )) {
-                        ForEach(viewModel.mapPins) { pin in
-                            Annotation(pin.restaurantName, coordinate: CLLocationCoordinate2D(
-                                latitude: pin.latitude, longitude: pin.longitude
-                            )) {
-                                mapPinView(pin)
+                        ForEach(clusters) { cluster in
+                            Annotation(clusterLabel(cluster), coordinate: cluster.coordinate) {
+                                mapAnnotationView(cluster)
                             }
                         }
                     }
                     .mapControls {
                         MapUserLocationButton()
                         MapCompass()
+                    }
+                    // The position binding's `set` above only fires when `newPosition.region`
+                    // is non-nil, but `MapCameraPosition` frequently represents live user
+                    // interaction (pinch/pan) in a form where `.region` is nil — silently
+                    // dropping the update and leaving `mapRegion` (and clustering, which reads
+                    // its span) stuck at the initial value forever. `onMapCameraChange` reports
+                    // the actual region reliably on every camera change instead.
+                    .onMapCameraChange { context in
+                        mapRegion = context.region
                     }
                 } else {
                     // iOS 16 fallback — the legacy `Map(coordinateRegion:...)` initializer has no
@@ -227,12 +236,10 @@ struct HomeScreen: View {
                     Map(
                         coordinateRegion: $mapRegion,
                         interactionModes: .all,
-                        annotationItems: viewModel.mapPins
-                    ) { pin in
-                        MapAnnotation(coordinate: CLLocationCoordinate2D(
-                            latitude: pin.latitude, longitude: pin.longitude
-                        )) {
-                            mapPinView(pin)
+                        annotationItems: clusters
+                    ) { cluster in
+                        MapAnnotation(coordinate: cluster.coordinate) {
+                            mapAnnotationView(cluster)
                         }
                     }
                 }
@@ -271,41 +278,92 @@ struct HomeScreen: View {
         )
     }
 
+    private func clusterLabel(_ cluster: MapCluster) -> String {
+        cluster.count == 1 ? cluster.pins[0].restaurantName : "\(cluster.count) deals"
+    }
+
+    @ViewBuilder
+    private func mapAnnotationView(_ cluster: MapCluster) -> some View {
+        if cluster.count == 1 {
+            mapPinView(cluster.pins[0])
+        } else {
+            mapClusterView(cluster)
+        }
+    }
+
+    private func mapClusterView(_ cluster: MapCluster) -> some View {
+        Button {
+            zoomToCluster(cluster)
+        } label: {
+            ZStack {
+                Image("Clustericon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 56, height: 56)
+                Text("\(cluster.count)")
+                    .font(SvFont.bodySmallStrong)
+                    .foregroundStyle(.white)
+            }
+        }
+        .accessibilityLabel("\(cluster.count) deals in this area")
+    }
+
+    /// Tapping a cluster zooms toward it instead of selecting a pin — halving the visible
+    /// span (clamped to a sane minimum) re-runs clustering at the next render and naturally
+    /// splits the group apart as pins spread out on screen.
+    private func zoomToCluster(_ cluster: MapCluster) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            mapRegion = MKCoordinateRegion(
+                center: cluster.coordinate,
+                span: MKCoordinateSpan(
+                    latitudeDelta: max(mapRegion.span.latitudeDelta * 0.4, 0.002),
+                    longitudeDelta: max(mapRegion.span.longitudeDelta * 0.4, 0.002)
+                )
+            )
+        }
+    }
+
     private func mapPinView(_ pin: DealMapPin) -> some View {
         let isSelected = viewModel.selectedPin?.id == pin.id
 
         return Button {
             viewModel.selectPin(pin)
         } label: {
-            VStack(spacing: 0) {
-                Image(pin.categoryImageName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 36, height: 36)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(isSelected ? Color.svPrimary : Color.white, lineWidth: 2)
-                    )
-                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-
-                Image(systemName: "triangle.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(isSelected ? Color.svPrimary : .white)
-                    .rotationEffect(.degrees(180))
-                    .offset(y: -2)
-            }
+            mapMarkerImage(url: pin.imageUrl)
+                .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                .scaleEffect(isSelected ? 1.15 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isSelected)
         }
         .accessibilityLabel("\(pin.restaurantName), \(pin.discountBadge) off")
+    }
+
+    /// `markerRestruent` is a full pin+pointer graphic with a circular cutout — sized here
+    /// from the asset's own measured proportions (cutout is centered horizontally, ~64% of
+    /// the marker's width in diameter, its top edge ~14.5% down from the marker's top edge)
+    /// so the offer photo drops precisely into that cutout regardless of the marker's
+    /// on-screen size.
+    private func mapMarkerImage(url: URL?) -> some View {
+        let markerWidth: CGFloat = 44
+        let markerHeight = markerWidth * (200.0 / 167.0)
+        let circleDiameter = markerWidth * 0.64
+        let circleTopInset = markerHeight * 0.145
+
+        return Image("markerRestruent")
+            .resizable()
+            .frame(width: markerWidth, height: markerHeight)
+            .overlay(alignment: .top) {
+                dealCardImage(url: url)
+                    .frame(width: circleDiameter, height: circleDiameter)
+                    .clipShape(Circle())
+                    .padding(.top, circleTopInset)
+            }
     }
 
     private func mapDealCard(_ pin: DealMapPin) -> some View {
         HStack(alignment: .top, spacing: 0) {
 
             // MARK: - Left Image
-            Image(pin.categoryImageName)
-                .resizable()
-                .scaledToFill()
+            dealCardImage(url: pin.imageUrl)
                 .frame(width: 130, height: 130)
                 .clipShape(
                     UnevenRoundedRectangle(
