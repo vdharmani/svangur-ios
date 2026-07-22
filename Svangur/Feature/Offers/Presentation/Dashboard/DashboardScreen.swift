@@ -4,6 +4,7 @@ struct DashboardScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @EnvironmentObject private var router: AppRouter
     @StateObject var viewModel: DashboardViewModel
+    @State private var isViewingProfileImage = false
 
     init(viewModel: DashboardViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -49,6 +50,9 @@ struct DashboardScreen: View {
                 )
             }
         }
+        .fullScreenCover(isPresented: $isViewingProfileImage) {
+            ProfileImageViewer(url: viewModel.profile?.imageURL)
+        }
     }
 
     // MARK: - Navigation Bar
@@ -92,14 +96,20 @@ struct DashboardScreen: View {
         if let profile = viewModel.profile {
             VStack(alignment: .leading, spacing: SvSpacing.md) {
                 HStack(alignment: .center, spacing: SvSpacing.md) {
-                    restaurantImage(profile)
-                        .frame(width: 82, height: 82)
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(Color.svPrimary, lineWidth: 1.5)
-                                .padding(-2)
-                        )
+                    Button {
+                        isViewingProfileImage = true
+                    } label: {
+                        restaurantImage(profile)
+                            .frame(width: 82, height: 82)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.svPrimary, lineWidth: 1.5)
+                                    .padding(-2)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View profile photo")
 
                     VStack(alignment: .leading, spacing: SvSpacing.md){
                         Text(profile.name)
@@ -501,6 +511,58 @@ struct DashboardScreen: View {
         }
         .padding(.top, SvSpacing.xxl)
         .redacted(reason: .placeholder)
+    }
+}
+
+// MARK: - Profile Image Viewer
+
+private struct ProfileImageViewer: View {
+    let url: URL?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            Group {
+                if let url {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .empty:
+                            ProgressView().tint(.white)
+                        case .failure:
+                            Color.svImagePlaceholder
+                        @unknown default:
+                            Color.svImagePlaceholder
+                        }
+                    }
+                } else {
+                    Color.svImagePlaceholder
+                }
+            }
+            .frame(width: 280, height: 280)
+            .clipShape(Circle())
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(Color.white.opacity(0.15)))
+                    }
+                    .accessibilityLabel("Close")
+                }
+                Spacer()
+            }
+            .padding(SvSpacing.screenPadding)
+        }
     }
 }
 

