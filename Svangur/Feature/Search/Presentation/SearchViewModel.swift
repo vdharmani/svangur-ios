@@ -5,11 +5,22 @@ import Combine
 final class SearchViewModel: ObservableObject {
 
     @Published var query: String = "" {
-        didSet { scheduleSearch() }
+        // No auto-search while typing — search only fires from `submitSearch()`. Clearing the
+        // field back to empty still snaps the content area back to the recent-searches view,
+        // but that's a local state reset, not a search request.
+        didSet {
+            guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            searchTask?.cancel()
+            state = .idle
+        }
     }
 
     @Published private(set) var state: SearchUiState = .idle
     @Published private(set) var recentSearches: [String] = []
+    /// Transient "tapped Search with an empty/whitespace-only field" nudge, shown via
+    /// `SvErrorBanner` (auto-dismisses itself). Distinct from `.error` state, which is reserved
+    /// for real API/network failures with their own full-screen retry UI.
+    @Published private(set) var validationMessage: String?
 
     private let searchOffersUseCase: SearchOffersUseCaseProtocol
     private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
@@ -77,7 +88,11 @@ final class SearchViewModel: ObservableObject {
 
     func submitSearch() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            validationMessage = "Please enter a search keyword."
+            return
+        }
+        validationMessage = nil
         addToRecentSearches(trimmed)
         searchTask?.cancel()
         state = .searching
@@ -87,25 +102,6 @@ final class SearchViewModel: ObservableObject {
     }
 
     // MARK: - Private
-
-    private func scheduleSearch() {
-        searchTask?.cancel()
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmed.isEmpty else {
-            state = .idle
-            return
-        }
-
-        guard trimmed.count >= 2 else { return }
-
-        state = .searching
-        searchTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            await self?.performSearch(trimmed)
-        }
-    }
 
     private func performSearch(_ searchText: String) async {
         do throws(AppError) {

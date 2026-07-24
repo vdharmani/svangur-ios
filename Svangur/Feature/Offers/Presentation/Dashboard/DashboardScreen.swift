@@ -30,7 +30,7 @@ struct DashboardScreen: View {
                 }
             }
             .background(Color.svBackground.ignoresSafeArea())
-            .refreshable { await viewModel.refresh() }
+            .refreshable { await viewModel.pullToRefresh() }
         }
         .background(Color.svBackground.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)

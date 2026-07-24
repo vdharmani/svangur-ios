@@ -40,6 +40,7 @@ struct SearchScreen: View {
             Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
         }
         .onAppear { isSearchFocused = true }
+        .svErrorBanner(viewModel.validationMessage)
     }
     
     // MARK: - Search Header
@@ -105,9 +106,9 @@ struct SearchScreen: View {
                     Text("RECENT SEARCHES")
                         .font(SvFont.bodySmallStrong)
                         .foregroundStyle(Color.svSecondary)
-                    
+
                     Spacer()
-                    
+
                     Button {
                         viewModel.clearRecentSearches()
                     } label: {
@@ -118,11 +119,16 @@ struct SearchScreen: View {
                 }
                 .padding(.horizontal, SvSpacing.screenPadding)
                 .padding(.top, SvSpacing.xl)
-                
+
                 recentSearchChips
+
+                Spacer()
+            } else {
+                Text("No Recent Searches")
+                    .font(SvFont.bodySmall)
+                    .foregroundStyle(Color.svSecondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            
-            Spacer()
         }
     }
     

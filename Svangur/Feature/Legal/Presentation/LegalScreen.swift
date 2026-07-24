@@ -5,6 +5,13 @@ struct LegalScreen: View {
     @EnvironmentObject private var languageService: LanguageService
     @StateObject var viewModel: LegalViewModel
 
+    /// Local, screen-only language selection — seeded from the app's current language on
+    /// appear so the document opens in the language the user is already browsing in, but never
+    /// written back to `languageService`. Switching this pill only re-fetches the document
+    /// below; it must never change the app's global language or affect any other screen (Home's
+    /// own language toggle is untouched and works entirely independently of this).
+    @State private var selectedLanguage: AppLanguage = .english
+
     init(viewModel: LegalViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
     }
@@ -29,9 +36,12 @@ struct LegalScreen: View {
         .background(Color.svBackground.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
-        .onChange(of: languageService.current) { _ in
-            Task { await viewModel.refresh(lang: languageService.current.rawValue) }
+        .task {
+            selectedLanguage = languageService.current
+            await viewModel.onAppear(lang: selectedLanguage.rawValue)
+        }
+        .onChange(of: selectedLanguage) { newValue in
+            Task { await viewModel.refresh(lang: newValue.rawValue) }
         }
     }
 
@@ -39,10 +49,10 @@ struct LegalScreen: View {
 
     private var languageToggle: some View {
         HStack(spacing: SvSpacing.sm) {
-            languagePill(title: "English", isSelected: languageService.current == .english) {
+            languagePill(title: "English", isSelected: selectedLanguage == .english) {
                 setLanguage(.english)
             }
-            languagePill(title: "Íslenska", isSelected: languageService.current == .icelandic) {
+            languagePill(title: "Íslenska", isSelected: selectedLanguage == .icelandic) {
                 setLanguage(.icelandic)
             }
             Spacer()
@@ -72,9 +82,9 @@ struct LegalScreen: View {
     }
 
     private func setLanguage(_ language: AppLanguage) {
-        guard languageService.current != language else { return }
+        guard selectedLanguage != language else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            languageService.toggle()
+            selectedLanguage = language
         }
     }
 
@@ -120,7 +130,7 @@ struct LegalScreen: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             SvPrimaryButton(title: "Retry") {
-                Task { await viewModel.refresh(lang: languageService.current.rawValue) }
+                Task { await viewModel.refresh(lang: selectedLanguage.rawValue) }
             }
             .padding(.horizontal, 20)
         }

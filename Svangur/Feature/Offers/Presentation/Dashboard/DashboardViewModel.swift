@@ -59,8 +59,20 @@ final class DashboardViewModel: ObservableObject {
         await reloadQuietly()
     }
 
+    /// Used by the error state's "Retry" button — that's an explicit request to redo the load
+    /// from scratch, so it goes through `loadInitial()` (shows the skeleton, and re-shows the
+    /// full-screen error/Retry state again if it fails a second time).
     func refresh() async {
         await loadInitial()
+        await refreshProfile()
+    }
+
+    /// Used by pull-to-refresh (`.refreshable`). The system's own pull-to-refresh spinner already
+    /// communicates "in progress," so this never flips `state` to `.loading`; a failure silently
+    /// keeps whatever list is already on screen instead of replacing it with the full-screen
+    /// error/Retry state — that state is reserved for the initial load and an explicit Retry tap.
+    func pullToRefresh() async {
+        await reloadQuietly()
         await refreshProfile()
     }
 
