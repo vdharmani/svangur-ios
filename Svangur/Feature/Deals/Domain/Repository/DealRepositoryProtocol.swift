@@ -22,7 +22,7 @@ protocol DealRepositoryProtocol: Sendable {
     func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory]
     func listDiscountFilters(lang: String) async throws(AppError) -> [DiscountUserFilter]
     func listOwnerDiscountOptions(lang: String) async throws(AppError) -> [DiscountOwnerOption]
-    func getDeal(id: String) async throws(AppError) -> DealListing
+    func getDeal(id: String, lang: String?) async throws(AppError) -> DealListing
     func trackView(id: String) async throws(AppError)
     func trackClick(id: String) async throws(AppError)
 }

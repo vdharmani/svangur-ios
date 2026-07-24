@@ -19,8 +19,10 @@ struct OfferDraft: Sendable, Equatable {
     var discountId: String?
     var customDiscountText: String?
     var validDays: Set<Weekday>
-    var validTimeStart: TimeOfDay
-    var validTimeEnd: TimeOfDay
+    /// `nil` until the user picks a time — the field is mandatory, so `ValidateOfferDraftUseCase`
+    /// treats either being unset as invalid rather than silently defaulting to a placeholder time.
+    var validTimeStart: TimeOfDay?
+    var validTimeEnd: TimeOfDay?
     var imageUris: [URL]
     var existingImageUrls: [URL]
     var existingImageIds: [String]
@@ -36,8 +38,8 @@ struct OfferDraft: Sendable, Equatable {
         discountId: nil,
         customDiscountText: nil,
         validDays: [],
-        validTimeStart: TimeOfDay(hour: 11, minute: 0),
-        validTimeEnd: TimeOfDay(hour: 22, minute: 0),
+        validTimeStart: nil,
+        validTimeEnd: nil,
         imageUris: [],
         existingImageUrls: [],
         existingImageIds: [],

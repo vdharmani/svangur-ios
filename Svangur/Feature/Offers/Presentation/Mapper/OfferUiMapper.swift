@@ -1,11 +1,25 @@
 import Foundation
 
 extension Offer {
-    func toUi() -> OfferUi {
-        OfferUi(
+    /// `titleEn`/`descriptionEn` fall back for `.icelandic` when the owner never filled in an
+    /// Icelandic translation — `titleIs`/`descriptionIs` are non-optional-but-possibly-empty on
+    /// the wire (`OfferRepositoryImpl.buildMultipart` mirrors this: it submits the English value
+    /// under `title_is` too when the Icelandic field was left blank), so an empty string here
+    /// means "untranslated," not "translated to nothing."
+    func toUi(for language: AppLanguage) -> OfferUi {
+        let title = (language == .icelandic && !titleIs.isEmpty) ? titleIs : titleEn
+        let description: String
+        switch language {
+        case .icelandic:
+            description = (descriptionIs?.isEmpty == false) ? descriptionIs! : (descriptionEn ?? "")
+        case .english:
+            description = descriptionEn ?? ""
+        }
+
+        return OfferUi(
             id: id,
-            title: titleEn,
-            description: descriptionEn ?? "",
+            title: title,
+            description: description,
             categoryDisplayText: Self.categoryDisplayText(for: categoryId),
             discountBadgeText: discountDisplayText,
             validDaysText: Self.formatValidDays(validDays),

@@ -37,7 +37,16 @@ struct SelectLocationScreen: View {
                 VStack(alignment: .leading, spacing: SvSpacing.lg) {
                     searchField
 
-                    if !viewModel.recentSearches.isEmpty {
+                    if viewModel.state == .searching {
+                        searchingIndicator
+                    }
+
+                    // Recents and search results are mutually exclusive: recents show only
+                    // while the field is empty (which also forces `state == .idle`, so the
+                    // results area below is guaranteed empty at the same time). Search
+                    // results take their place — below Use Current Location — once a
+                    // search runs, and clearing the field brings recents back here.
+                    if viewModel.query.isEmpty && !viewModel.recentSearches.isEmpty {
                         recentSearchesSection
                     }
 
@@ -47,6 +56,7 @@ struct SelectLocationScreen: View {
                 }
                 .padding(.horizontal, SvSpacing.screenPadding)
                 .padding(.top, SvSpacing.sectionSpacing)
+                .animation(.easeInOut(duration: 0.2), value: viewModel.state)
 
                 Spacer()
             }
@@ -89,12 +99,13 @@ struct SelectLocationScreen: View {
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled(true)
                 .submitLabel(.search)
+                .onSubmit { viewModel.searchNow() }
         }
         .padding(.horizontal, SvSpacing.lg)
         .frame(height: SvSpacing.inputHeight)
         .background(
             RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                .fill(Color.svSurface)
+                .fill(Color.white)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
@@ -124,24 +135,26 @@ struct SelectLocationScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.sm) {
-                    ForEach(viewModel.recentSearches, id: \.self) { name in
-                        recentChip(name)
+                    ForEach(viewModel.recentSearches) { item in
+                        recentChip(item)
                     }
                 }
             }
         }
     }
 
-    private func recentChip(_ name: String) -> some View {
+    private func recentChip(_ item: RecentLocationSearch) -> some View {
         Button {
-            viewModel.selectRecent(name)
-            router.navigate(to: .confirmLocation(name: name, placeID: nil))
+            viewModel.selectRecent(item)
+            // Carries the recent's original `placeID` so ConfirmLocation re-resolves the SAME
+            // place (map, pin, address, coordinates) instead of falling back to the GPS fix.
+            router.navigate(to: .confirmLocation(name: item.displayName, placeID: item.placeID))
         } label: {
             HStack(spacing: SvSpacing.sm) {
                 Image("ic_recentTime")
                     .font(.system(size: 14))
 
-                Text(name)
+                Text(item.displayName)
                     .font(SvFont.bodySmall)
             }
             .padding(.horizontal, SvSpacing.md)
@@ -163,7 +176,7 @@ struct SelectLocationScreen: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(name)
+        .accessibilityLabel(item.displayName)
     }
     
 
@@ -196,54 +209,83 @@ struct SelectLocationScreen: View {
     @ViewBuilder
     private var resultsArea: some View {
         switch viewModel.state {
-        case .idle:
+        // `.searching` renders as the inline indicator directly below the search field —
+        // this area (below Use Current Location) only ever shows the outcome of a search.
+        case .idle, .searching:
             EmptyView()
 
-        case .searching:
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.top, SvSpacing.lg)
-
         case .results(let results):
-            VStack(spacing: 0) {
-                ForEach(results) { result in
-                    Button {
-                        viewModel.selectResult(result)
-                        router.navigate(to: .confirmLocation(name: result.displayName, placeID: result.id))
-                    } label: {
-                        HStack(spacing: SvSpacing.md) {
-                            Image(systemName: "mappin")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.svPrimary)
-                                .frame(width: 24)
-                            Text(result.displayName)
-                                .font(SvFont.body)
-                                .foregroundStyle(Color.svOnBackground)
-                            Spacer()
-                        }
-                        .padding(.vertical, SvSpacing.md)
-                    }
-                    .buttonStyle(.plain)
-                    Divider().background(Color.svDivider)
-                }
-            }
+            resultsList(results)
 
-        case .noResults(let query):
-            VStack(alignment: .leading, spacing: SvSpacing.sm) {
-                Text("No matches for \"\(query)\"")
-                    .font(SvFont.bodySmall)
-                    .foregroundStyle(Color.svSecondary)
-            }
-            .padding(.top, SvSpacing.lg)
+        case .noResults:
+            Text("No locations found")
+                .font(SvFont.bodySmall)
+                .foregroundStyle(Color.svSecondary)
 
         case .error(let message):
-            VStack(alignment: .leading, spacing: SvSpacing.sm) {
-                Text(message)
-                    .font(SvFont.bodySmall)
-                    .foregroundStyle(Color.svError)
-            }
-            .padding(.top, SvSpacing.lg)
+            Text(message)
+                .font(SvFont.bodySmall)
+                .foregroundStyle(Color.svError)
         }
+    }
+
+    // MARK: - Inline searching indicator (directly below the search field)
+
+    private var searchingIndicator: some View {
+        HStack(spacing: SvSpacing.sm) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(Color.svPrimary)
+            Text("Searching…")
+                .font(SvFont.bodySmall)
+                .foregroundStyle(Color.svPrimary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Searching locations")
+    }
+
+    // MARK: - Results list (white rounded card, title + locality rows)
+
+    private func resultsList(_ results: [SelectLocationResultUi]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(results) { result in
+                Button {
+                    viewModel.selectResult(result)
+                    searchFocused = false
+                    router.navigate(to: .confirmLocation(name: result.displayName, placeID: result.id))
+                } label: {
+                    VStack(alignment: .leading, spacing: SvSpacing.xxs) {
+                        Text(result.title)
+                            .font(SvFont.bodySmallStrong)
+                            .foregroundStyle(Color.svOnBackground)
+                        if !result.subtitle.isEmpty {
+                            Text(result.subtitle)
+                                .font(SvFont.caption)
+                                .foregroundStyle(Color.svSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, SvSpacing.md)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(result.displayName)
+
+                if result.id != results.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .fill(Color.white)
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .stroke(Color.svDivider.opacity(0.6), lineWidth: 1)
+        )
     }
 }
 

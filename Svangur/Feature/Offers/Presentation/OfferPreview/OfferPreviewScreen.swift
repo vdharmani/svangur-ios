@@ -211,8 +211,11 @@ struct OfferPreviewScreen: View {
         return sorted.map(shortName).joined(separator: ", ")
     }
 
+    /// The Preview screen is only reachable once `AddOfferViewModel.onTapPreview()` has confirmed
+    /// `validation.isValid`, which requires both times to be set — the `?? .startOfDay`/`.endOfDay`
+    /// fallbacks here are defensive only, never actually hit.
     private var timesText: String {
-        "\(draft.validTimeStart.formatted24h) – \(draft.validTimeEnd.formatted24h)"
+        "\((draft.validTimeStart ?? .startOfDay).formatted24h) – \((draft.validTimeEnd ?? .endOfDay).formatted24h)"
     }
 
     private func isContiguous(_ days: [Weekday]) -> Bool {

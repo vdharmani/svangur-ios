@@ -20,19 +20,44 @@ struct ConfirmLocationScreen: View {
     @ViewBuilder
     private func compactLayout() -> some View {
         ZStack {
-            mapLayer
-            pinMarker
-                .allowsHitTesting(false)
+            // The map is created only AFTER the target coordinate is resolved — its initial
+            // camera is set at creation time, so the first rendered frame is already centered
+            // on the right location instead of flashing a default and jumping.
+            if viewModel.isReady {
+                mapLayer
+                pinMarker
+                    .allowsHitTesting(false)
+                bottomCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            } else {
+                detectingLocationPlaceholder
+            }
             topHeader
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            bottomCard
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         }
+        .animation(.easeInOut(duration: 0.25), value: viewModel.isReady)
         .ignoresSafeArea(edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.onAppear()
         }
+    }
+
+    // MARK: - Pre-map placeholder (while the current location is being resolved)
+
+    private var detectingLocationPlaceholder: some View {
+        VStack(spacing: SvSpacing.md) {
+            ProgressView()
+                .tint(Color.svPrimary)
+            Text("Detecting location…")
+                .font(SvFont.bodySmall)
+                .foregroundStyle(Color.svSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.svBackground)
+        .ignoresSafeArea()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Detecting location")
     }
 
     // MARK: - Map
@@ -59,25 +84,19 @@ struct ConfirmLocationScreen: View {
         }
     }
 
-    // MARK: - Center pin marker (fixed at screen center)
+    // MARK: - Center pin marker (fixed at screen center — the SELECTED location)
+    //
+    // Deliberately NOT the blue "current location" dot: that comes from the map itself
+    // (`UserAnnotation()` / `showsUserLocation`) and stays pinned to the device's real GPS
+    // position while this pin tracks whatever the map is centered on.
 
     private var pinMarker: some View {
-        ZStack {
-            Circle()
-                .fill(Color.svConfirmAccuracy)
-                .frame(width: 70, height: 70)
-
-            Circle()
-                .fill(Color.svConfirmDot)
-                .frame(width: 14, height: 14)
-                .overlay(Circle().stroke(.white, lineWidth: 2))
-                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-
-            Image(systemName: "mappin")
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(.black)
-                .offset(y: -28)
-        }
+        Image(systemName: "mappin")
+            .font(.system(size: 30, weight: .medium))
+            .foregroundStyle(.black)
+            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+            // Lifts the pin so its tip — not its middle — sits on the map's center point.
+            .offset(y: -15)
     }
 
     // MARK: - Top header
@@ -187,24 +206,22 @@ private struct ModernMapLayer: View {
     }
 
     var body: some View {
-        Map(position: $cameraPosition)
+        // `.all` interaction modes: pan, pinch/double-tap/two-finger zoom, rotate, and pitch.
+        // `UserAnnotation()` renders the system blue dot at the device's real GPS position —
+        // it moves only when the GPS fix changes, never with map drags.
+        Map(position: $cameraPosition, interactionModes: .all) {
+            UserAnnotation()
+        }
             .mapStyle(.standard(elevation: .flat))
-            .onMapCameraChange { context in
+            .onMapCameraChange(frequency: .continuous) { context in
                 viewModel.updateCoordinate(
                     latitude: context.region.center.latitude,
                     longitude: context.region.center.longitude
                 )
             }
-            // Recenters once `viewModel.onAppear()` resolves a real place (async, after this
-            // view is first created with the placeholder coordinate).
-            .onChange(of: viewModel.latitude) { _, _ in
-                cameraPosition = .region(
-                    MKCoordinateRegion(
-                        center: viewModel.coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                    )
-                )
-            }
+            // No programmatic recenter observers: this layer is only created once the target
+            // coordinate is resolved, so the initial camera (set in `init`) is already right —
+            // and any camera write after creation would fight the user's pan/zoom gestures.
             .ignoresSafeArea()
     }
 }
@@ -222,16 +239,11 @@ private struct LegacyMapLayer: View {
     }
 
     var body: some View {
-        Map(coordinateRegion: regionBinding)
-            // Recenters once `viewModel.onAppear()` resolves a real place. Uses the iOS
-            // 14-compatible single-argument `.onChange(of:perform:)` overload since this view
-            // has no `@available` guard.
-            .onChange(of: viewModel.latitude) { _ in
-                region = MKCoordinateRegion(
-                    center: viewModel.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                )
-            }
+        // `showsUserLocation` renders the system blue dot at the real GPS position,
+        // independent of the draggable selection pin at screen center. No programmatic
+        // recenter: this layer is only created once the target coordinate is resolved (see
+        // `ModernMapLayer`), so the initial region is already right.
+        Map(coordinateRegion: regionBinding, interactionModes: .all, showsUserLocation: true)
             .ignoresSafeArea()
     }
 
@@ -247,13 +259,6 @@ private struct LegacyMapLayer: View {
             }
         )
     }
-}
-
-// Local map-marker tokens — promote to Color.svMapPin* in the Asset Catalog
-// when the design system adds a map palette.
-private extension Color {
-    static let svConfirmDot      = Color(red: 0.20, green: 0.47, blue: 0.96)
-    static let svConfirmAccuracy = Color(red: 0.20, green: 0.47, blue: 0.96).opacity(0.18)
 }
 
 // MARK: - Previews

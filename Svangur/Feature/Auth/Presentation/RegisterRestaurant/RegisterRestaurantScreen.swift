@@ -180,7 +180,7 @@ struct RegisterRestaurantScreen: View {
                   placeholder: "Enter password again",
                   text: $viewModel.confirmPassword,
                   error: viewModel.validation.confirmPassword,
-                  emptyMessage: "Please enter password again.",
+                  emptyMessage: "Please enter confirm password.",
                   keyboard: .default,
                   capitalization: .never,
                   contentType: .newPassword,
@@ -207,14 +207,17 @@ struct RegisterRestaurantScreen: View {
         descriptionSection
 
         SvPrimaryButton(title: "Continue") {
-            guard viewModel.validateBasicInfoStep() else { return }
+            guard viewModel.validateBasicInfoStep() else {
+                focusFirstInvalidBasicInfoField()
+                return
+            }
             withAnimation(.easeInOut(duration: 0.3)) {
                 currentStep = .businessDetails
             }
         }
         .padding(.top, SvSpacing.sm)
     }
-    
+
     // MARK: - Step 2: Business Details
     
     @ViewBuilder
@@ -402,7 +405,11 @@ struct RegisterRestaurantScreen: View {
                     }
 
                 if let error = viewModel.validation.restaurantName,
-                   let key = errorKey(for: error, emptyMessage: "Please enter a name.") {
+                   let key = errorKey(
+                       for: error,
+                       emptyMessage: "Please enter a name.",
+                       tooShortMessage: "Name must be at least 3 characters."
+                   ) {
                     Text(key)
                         .font(SvFont.caption)
                         .foregroundStyle(Color.svError)
@@ -429,7 +436,11 @@ struct RegisterRestaurantScreen: View {
                     }
 
                 if let error = viewModel.validation.restaurantNameIcelandic,
-                   let key = errorKey(for: error, emptyMessage: "Please enter a name.") {
+                   let key = errorKey(
+                       for: error,
+                       emptyMessage: "Please enter a name.",
+                       tooShortMessage: "Name must be at least 3 characters."
+                   ) {
                     Text(key)
                         .font(SvFont.caption)
                         .foregroundStyle(Color.svError)
@@ -502,7 +513,7 @@ struct RegisterRestaurantScreen: View {
     // MARK: - Language chip
 
     @ViewBuilder
-    private func languageChip(_ title: String, isSelected: Bool, action: (() -> Void)? = nil) -> some View {
+    private func languageChip(_ title: LocalizedStringKey, isSelected: Bool, action: (() -> Void)? = nil) -> some View {
         let content = HStack(spacing: 4) {
             Text(title)
             if isSelected {
@@ -757,13 +768,47 @@ struct RegisterRestaurantScreen: View {
             .fill(Color.svFieldBackground)
     }
     
+    // MARK: - Focus first invalid field
+
+    /// Walks the Basic Info fields in the same top-to-bottom order they appear on screen and
+    /// focuses the first one that failed validation, so the keyboard opens right where the user
+    /// needs to fix something. The Restaurant Images field is the one exception — it has no
+    /// keyboard/focus target, so its inline error message (already rendered by `imagesSection`)
+    /// is left to speak for itself and focus resolution stops there without moving to a later
+    /// field, matching "stop at the first invalid field."
+    private func focusFirstInvalidBasicInfoField() {
+        guard viewModel.validation.images == nil else { return }
+
+        if viewModel.isEnglishNameSelected, viewModel.validation.restaurantName != nil {
+            focusedField = .restaurantName
+        } else if viewModel.isIcelandicNameSelected, viewModel.validation.restaurantNameIcelandic != nil {
+            focusedField = .restaurantNameIcelandic
+        } else if viewModel.validation.email != nil {
+            focusedField = .email
+        } else if viewModel.validation.password != nil {
+            focusedField = .password
+        } else if viewModel.validation.confirmPassword != nil {
+            focusedField = .confirmPassword
+        } else if viewModel.validation.phoneNumber != nil {
+            focusedField = .phone
+        } else if viewModel.isEnglishDescriptionSelected, viewModel.validation.description != nil {
+            focusedField = .description
+        } else if viewModel.isIcelandicDescriptionSelected, viewModel.validation.descriptionIcelandic != nil {
+            focusedField = .descriptionIcelandic
+        }
+    }
+
     // MARK: - Error mapping
-    
-    private func errorKey(for error: ValidationError?, emptyMessage: LocalizedStringKey) -> LocalizedStringKey? {
+
+    private func errorKey(
+        for error: ValidationError?,
+        emptyMessage: LocalizedStringKey,
+        tooShortMessage: LocalizedStringKey? = nil
+    ) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
         case .empty:            return emptyMessage
-        case .tooShort(let m):  return "Must be at least \(m) characters"
+        case .tooShort(let m):  return tooShortMessage ?? "Must be at least \(m) characters"
         case .tooLong(let m):   return "Must be \(m) characters or fewer"
         case .invalidFormat:    return "Please enter valid email address"
         case .custom(let key):  return LocalizedStringKey(key)

@@ -7,10 +7,12 @@ struct OfferDraftValidationErrors: Sendable, Equatable {
     var discount: ValidationError?
     var validDays: ValidationError?
     var validTime: ValidationError?
+    var images: ValidationError?
 
     var isValid: Bool {
         title == nil && description == nil && category == nil &&
-        discount == nil && validDays == nil && validTime == nil
+        discount == nil && validDays == nil && validTime == nil &&
+        images == nil
     }
 }
 
@@ -63,8 +65,16 @@ final class ValidateOfferDraftUseCase: ValidateOfferDraftUseCaseProtocol, Sendab
             errors.validDays = .empty
         }
 
-        if draft.validTimeEnd <= draft.validTimeStart {
-            errors.validTime = .custom(messageKey: "End time must be after start time")
+        if let start = draft.validTimeStart, let end = draft.validTimeEnd {
+            if end <= start {
+                errors.validTime = .custom(messageKey: "End time must be after start time")
+            }
+        } else {
+            errors.validTime = .empty
+        }
+
+        if draft.imageUris.isEmpty && draft.existingImageUrls.isEmpty {
+            errors.images = .empty
         }
 
         return errors

@@ -7,10 +7,10 @@ final class OfferRepositoryImpl: OfferRepositoryProtocol, Sendable {
         self.apiClient = apiClient
     }
 
-    func getMyOffers(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
+    func getMyOffers(page: Int, limit: Int, lang: String?) async throws(AppError) -> PaginatedResult<Offer> {
         try await apiCall {
             let envelope: OfferListEnvelopeDTO = try await apiClient.execute(
-                OfferEndpoint.listOffers(page: page, limit: limit)
+                OfferEndpoint.listOffers(page: page, limit: limit, lang: lang)
             )
             let payload = envelope.data
             return PaginatedResult(
@@ -97,8 +97,12 @@ final class OfferRepositoryImpl: OfferRepositoryProtocol, Sendable {
             .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         form.appendField(name: "valid_days", value: validDaysJSON)
 
-        form.appendField(name: "valid_time_start", value: draft.validTimeStart.formatted24h)
-        form.appendField(name: "valid_time_end", value: draft.validTimeEnd.formatted24h)
+        // By the time a draft reaches here, `CreateOfferUseCase`/`UpdateOfferUseCase` have
+        // already required `ValidateOfferDraftUseCase.execute(draft).isValid`, which rejects a
+        // draft with either time unset — these fallbacks are defensive only, never hit in
+        // practice.
+        form.appendField(name: "valid_time_start", value: (draft.validTimeStart ?? .startOfDay).formatted24h)
+        form.appendField(name: "valid_time_end", value: (draft.validTimeEnd ?? .endOfDay).formatted24h)
 
         if includeRemoveImageIds, !draft.removedImageIds.isEmpty {
             form.appendField(name: "remove_image_ids", value: draft.removedImageIds.joined(separator: ","))

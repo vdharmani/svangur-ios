@@ -28,11 +28,17 @@ struct LoginScreen: View {
 
             // Page content — respects the top safe area, same as ForgotPasswordScreen,
             // so the back button lands in the same screen position on both screens.
-            VStack(spacing: 25) {
-                header
-                form
-                Spacer(minLength: 0)
+            // Wrapped in a ScrollView so the form (and the Login button) can be scrolled
+            // into view once the keyboard covers them — previously this was a bare VStack,
+            // which can't scroll and left fields/button hidden behind the keyboard.
+            ScrollView {
+                VStack(spacing: 25) {
+                    header
+                    form
+                    Spacer(minLength: 0)
+                }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)

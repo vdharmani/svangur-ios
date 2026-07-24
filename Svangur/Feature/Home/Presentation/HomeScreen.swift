@@ -46,6 +46,12 @@ struct HomeScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .svErrorBanner(viewModel.refreshErrorMessage)
         .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        // `.task { }` above only fires once per view identity — toggling the flag mid-session
+        // needs this separate hook so server-driven content (days, categories, discount
+        // filters, deals) re-fetches in the new language instead of staying stuck.
+        .onChange(of: languageService.current) { newValue in
+            Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
+        }
     }
 
     private var listContent: some View {
@@ -464,11 +470,22 @@ struct HomeScreen: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.lg) {
-                    categoryItem(name: "All", categoryId: nil, imageName: "sandwich")
+                    // `categoryItem(label:)` takes a `Text` rather than a `String` so the
+                    // static "All" option can go through the `LocalizedStringKey` catalog
+                    // lookup (`Text("All")`, resolved via the `.environment(\.locale, ...)`
+                    // set in `SvangurApp`) while server-localized category names stay verbatim.
+                    categoryItem(
+                        label: Text("All"),
+                        accessibilityName: "All",
+                        categoryId: nil,
+                        imageName: "sandwich"
+                    )
                     ForEach(viewModel.categories, id: \.id) { category in
                         let icon = categoryIconAssets(for: category.slug)
+                        let name = category.localizedName(for: languageService.current)
                         categoryItem(
-                            name: category.localizedName(for: languageService.current),
+                            label: Text(verbatim: name),
+                            accessibilityName: name,
                             categoryId: category.id,
                             imageName: icon.imageName,
                             symbolName: icon.symbolName
@@ -483,7 +500,8 @@ struct HomeScreen: View {
     
 
     private func categoryItem(
-        name: String,
+        label: Text,
+        accessibilityName: String,
         categoryId: String?,
         imageName: String? = nil,
         symbolName: String? = nil
@@ -523,7 +541,7 @@ struct HomeScreen: View {
                 }
                 .padding(.top, 4)
 
-                Text(name)
+                label
                     .font(SvFont.bodySmallStrong)
                     .foregroundStyle(
                         isSelected
@@ -534,7 +552,7 @@ struct HomeScreen: View {
         }
         .buttonStyle(.plain)
         .frame(minWidth: 44, minHeight: 44)
-        .accessibilityLabel("\(name) category")
+        .accessibilityLabel("\(accessibilityName) category")
     }
 
     /// JUDGMENT CALL: the real `/categories` list has no icon/image field, and only a handful of
@@ -671,7 +689,6 @@ struct HomeScreen: View {
     private func dayChip(_ day: DayItem) -> some View {
         let isSelected = viewModel.selectedDayKey == day.key
         let isToday = day.isToday
-        let label = isToday ? "Today" : day.shortLabel
 
         let shape = RoundedRectangle(
             cornerRadius: 14,
@@ -681,7 +698,17 @@ struct HomeScreen: View {
         return Button {
             viewModel.selectDay(day)
         } label: {
-            Text(label)
+            // `day.shortLabel` is a dynamic, already-server-localized `String` (fetched with
+            // the current `lang`) — kept verbatim. "Today" is static UI chrome, so it goes
+            // through the `LocalizedStringKey` catalog lookup instead of being pre-computed
+            // into a `String` (which silently skipped the catalog in an earlier attempt).
+            Group {
+                if isToday {
+                    Text("Today")
+                } else {
+                    Text(verbatim: day.shortLabel)
+                }
+            }
                 .font(SvFont.captionStrong)
                 .padding(.horizontal, SvSpacing.lg)
                 .frame(height: 38)

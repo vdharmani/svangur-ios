@@ -130,7 +130,7 @@ struct ChangePasswordScreen: View {
             .onSubmit { Task { await viewModel.submit() } }
             .padding(.top, 16)
 
-            if let key = errorKey(for: viewModel.validation.confirmPassword, emptyMessage: "Please enter confirm password") {
+            if let key = errorKey(for: viewModel.validation.confirmPassword, emptyMessage: "Please enter confirm password.") {
                 Text(key)
                     .font(SvFont.caption)
                     .foregroundStyle(Color.svError)

@@ -4,6 +4,7 @@ struct DealDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject var viewModel: DealDetailViewModel
 
     init(viewModel: DealDetailViewModel) {
@@ -36,7 +37,10 @@ struct DealDetailScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await viewModel.onAppear() }
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        .onChange(of: languageService.current) { newValue in
+            Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
+        }
     }
 
     // MARK: - Loaded Content
@@ -425,12 +429,14 @@ struct DealDetailScreen: View {
             state: .loaded(.preview)
         ))
     }
+    .environmentObject(LanguageService())
 }
 
 #Preview("Deal Detail - Loading") {
     NavigationStack {
         DealDetailScreen(viewModel: .previewInstance(state: .loading))
     }
+    .environmentObject(LanguageService())
 }
 
 #Preview("Deal Detail - Error") {
@@ -439,6 +445,7 @@ struct DealDetailScreen: View {
             state: .error("Something went wrong")
         ))
     }
+    .environmentObject(LanguageService())
 }
 
 #Preview("Deal Detail - Wide (no break)") {
@@ -447,5 +454,6 @@ struct DealDetailScreen: View {
             state: .loaded(.preview)
         ))
     }
+    .environmentObject(LanguageService())
     .frame(width: 1024, height: 1366)
 }

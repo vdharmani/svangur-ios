@@ -11,7 +11,7 @@ actor MockOfferRepository: OfferRepositoryProtocol {
         self.nextId = (seed.map(\.id).max() ?? 0) + 1
     }
 
-    func getMyOffers(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
+    func getMyOffers(page: Int, limit: Int, lang: String?) async throws(AppError) -> PaginatedResult<Offer> {
         try? await Task.sleep(for: .milliseconds(600))
         let sorted = store.values.sorted { $0.id > $1.id }
         let startIndex = min((page - 1) * limit, sorted.count)
@@ -48,8 +48,8 @@ actor MockOfferRepository: OfferRepositoryProtocol {
             discountValue: draft.discountId,
             customDiscountText: draft.customDiscountText,
             validDays: draft.validDays,
-            validTimeStart: draft.validTimeStart,
-            validTimeEnd: draft.validTimeEnd,
+            validTimeStart: draft.validTimeStart ?? .startOfDay,
+            validTimeEnd: draft.validTimeEnd ?? .endOfDay,
             status: .approved,
             isActive: true,
             heroImageUrl: draft.existingImageUrls.first,
@@ -75,8 +75,8 @@ actor MockOfferRepository: OfferRepositoryProtocol {
             discountValue: draft.discountId ?? existing.discountValue,
             customDiscountText: draft.customDiscountText,
             validDays: draft.validDays,
-            validTimeStart: draft.validTimeStart,
-            validTimeEnd: draft.validTimeEnd,
+            validTimeStart: draft.validTimeStart ?? .startOfDay,
+            validTimeEnd: draft.validTimeEnd ?? .endOfDay,
             status: existing.status,
             isActive: existing.isActive,
             heroImageUrl: draft.existingImageUrls.first ?? existing.heroImageUrl,

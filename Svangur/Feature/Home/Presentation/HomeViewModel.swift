@@ -30,9 +30,9 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var refreshErrorMessage: String?
 
     // MARK: - Map state
-    /// Derived from the same `GET /offers` response as `state` — populated in `loadOffers()`.
-    /// Deals without a coordinate are dropped (`DealListing.toMapPin()`), so this can be a
-    /// shorter list than the deals shown in `state`.
+    /// Fetched independently of `state` via `loadMapPins()` (`GET /offers?lang=...`, no
+    /// lat/lng/device_id — the map shows every deal with a coordinate, not a location-sorted,
+    /// filtered feed). Deals without a coordinate are dropped (`DealListing.toMapPin()`).
     @Published private(set) var mapPins: [DealMapPin] = []
     @Published private(set) var selectedPin: DealMapPin?
 
@@ -40,6 +40,7 @@ final class HomeViewModel: ObservableObject {
 
     // MARK: - Dependencies
     private let getHomeDealsUseCase: GetHomeDealsUseCaseProtocol
+    private let getMapPinsUseCase: GetMapPinsUseCaseProtocol
     private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
     private let dealRepository: DealRepositoryProtocol
     private let getDaysUseCase: GetDaysUseCaseProtocol
@@ -59,6 +60,7 @@ final class HomeViewModel: ObservableObject {
 
     init(
         getHomeDealsUseCase: GetHomeDealsUseCaseProtocol,
+        getMapPinsUseCase: GetMapPinsUseCaseProtocol,
         getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol,
         dealRepository: DealRepositoryProtocol,
         getDaysUseCase: GetDaysUseCaseProtocol,
@@ -66,6 +68,7 @@ final class HomeViewModel: ObservableObject {
         deviceId: String
     ) {
         self.getHomeDealsUseCase = getHomeDealsUseCase
+        self.getMapPinsUseCase = getMapPinsUseCase
         self.getCurrentLocationUseCase = getCurrentLocationUseCase
         self.dealRepository = dealRepository
         self.getDaysUseCase = getDaysUseCase
@@ -85,18 +88,49 @@ final class HomeViewModel: ObservableObject {
         async let discountFiltersTask: Void = loadDiscountFilters(lang: lang)
         async let daysTask: Void = loadDays(lang: lang)
         async let categoriesTask: Void = loadCategories(lang: lang)
-        await loadLocation()
+        async let mapPinsTask: Void = loadMapPins(lang: lang)
+        // Only resolve GPS location on the true first appearance. `HomeScreen` disappears and
+        // reappears (re-firing `.task { }` → this method) every time a screen is pushed/popped
+        // on top of it — including the Select/Confirm Location flow. Re-running unconditionally
+        // would silently overwrite a location the user just manually confirmed (delivered live by
+        // `observeSelectedLocation()`, which keeps running in the background across that
+        // disappearance) with the stale cached GPS snapshot the moment Home comes back.
+        if currentLocation == nil {
+            await loadLocation()
+        }
         if state == .idle {
             await loadOffers()
         }
         await discountFiltersTask
         await daysTask
         await categoriesTask
+        await mapPinsTask
         observeSelectedLocation()
     }
 
     func refresh() async {
+        async let offersTask: Void = loadOffers()
+        async let mapPinsTask: Void = loadMapPins(lang: currentLang)
+        await offersTask
+        await mapPinsTask
+    }
+
+    /// `.task { }` on `HomeScreen` only fires once per view identity, so toggling the language
+    /// flag mid-session never re-triggers `onAppear` — every server-driven piece of UI (days,
+    /// categories, discount filters, deals, map pins) has to be explicitly re-fetched here
+    /// instead, or it stays stuck showing whatever language was active on first load.
+    func onLanguageChange(lang: String) async {
+        guard lang != currentLang else { return }
+        currentLang = lang
+        async let discountFiltersTask: Void = loadDiscountFilters(lang: lang)
+        async let daysTask: Void = loadDays(lang: lang, autoSelectToday: false)
+        async let categoriesTask: Void = loadCategories(lang: lang)
+        async let mapPinsTask: Void = loadMapPins(lang: lang)
         await loadOffers()
+        await discountFiltersTask
+        await daysTask
+        await categoriesTask
+        await mapPinsTask
     }
 
     // MARK: - Filter actions
@@ -179,12 +213,19 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func loadDays(lang: String) async {
+    /// `autoSelectToday` is only meant for the very first load (`onAppear`), where
+    /// `selectedDayKey` may still hold the locally-computed fallback guess made before this
+    /// server response arrived — correcting it there can trigger an extra `loadOffers()`.
+    /// `onLanguageChange` passes `false`: `selectedDayKey` is already correct by then (only the
+    /// display labels change with language, not which day is "today"), and `onLanguageChange`
+    /// already reloads offers itself once — letting this cascade too would fetch them twice
+    /// per toggle.
+    private func loadDays(lang: String, autoSelectToday: Bool = true) async {
         do throws(AppError) {
             let fetched = try await getDaysUseCase.execute(lang: lang, tz: TimeZone.current.identifier)
             guard !fetched.isEmpty else { return }
             days = fetched
-            if !userSelectedDay {
+            if autoSelectToday, !userSelectedDay {
                 let resolvedTodayKey = fetched.first(where: \.isToday)?.key
                 // The initial `loadOffers()` in `onAppear` may already have fired using the
                 // locally-computed fallback day key, before this server response arrived. If the
@@ -231,13 +272,24 @@ final class HomeViewModel: ObservableObject {
             )
             refreshErrorMessage = nil
             state = deals.isEmpty ? .empty : .loaded(deals.map { $0.toDealCard() })
-            mapPins = deals.compactMap { $0.toMapPin() }
         } catch {
             if isRefreshOfExistingContent {
                 refreshErrorMessage = error.displayMessage
             } else {
                 state = .error(error.displayMessage)
             }
+        }
+    }
+
+    /// Fetches the unfiltered feed (`GET /offers?lang=...`, no lat/lng/device_id) that backs the
+    /// map pins — independent of `loadOffers()`'s filters/location so a pin placement failure or
+    /// refresh never blocks the list, and vice versa.
+    private func loadMapPins(lang: String) async {
+        do throws(AppError) {
+            let deals = try await getMapPinsUseCase.execute(lang: lang)
+            mapPins = deals.compactMap { $0.toMapPin() }
+        } catch {
+            // Keep whatever pins are already on screen rather than clearing the map on failure.
         }
     }
 
@@ -283,6 +335,7 @@ extension HomeViewModel {
     static func previewInstance(state: HomeUiState = .idle) -> HomeViewModel {
         let vm = HomeViewModel(
             getHomeDealsUseCase: FakeGetHomeDealsUseCase(),
+            getMapPinsUseCase: FakeGetMapPinsUseCase(),
             getCurrentLocationUseCase: FakeGetCurrentLocationUseCase(),
             dealRepository: FakeDealRepository(),
             getDaysUseCase: FakeGetDaysUseCase(),
@@ -307,6 +360,10 @@ private struct FakeGetHomeDealsUseCase: GetHomeDealsUseCaseProtocol {
         limit: Int,
         deviceId: String
     ) async throws(AppError) -> [DealListing] { [] }
+}
+
+private struct FakeGetMapPinsUseCase: GetMapPinsUseCaseProtocol {
+    func execute(lang: String) async throws(AppError) -> [DealListing] { [] }
 }
 
 private struct FakeGetCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol {
@@ -337,7 +394,7 @@ private struct FakeDealRepository: DealRepositoryProtocol {
     func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
     func listDiscountFilters(lang: String) async throws(AppError) -> [DiscountUserFilter] { [] }
     func listOwnerDiscountOptions(lang: String) async throws(AppError) -> [DiscountOwnerOption] { [] }
-    func getDeal(id: String) async throws(AppError) -> DealListing {
+    func getDeal(id: String, lang: String?) async throws(AppError) -> DealListing {
         throw .notFound()
     }
     func trackView(id: String) async throws(AppError) {}

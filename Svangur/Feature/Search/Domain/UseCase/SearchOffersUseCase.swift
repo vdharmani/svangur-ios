@@ -1,7 +1,7 @@
 import Foundation
 
 protocol SearchOffersUseCaseProtocol: Sendable {
-    func execute(query: String, lat: Double?, lng: Double?) async throws(AppError) -> [SearchOffer]
+    func execute(query: String, lat: Double?, lng: Double?, lang: String) async throws(AppError) -> [SearchOffer]
 }
 
 final class SearchOffersUseCase: SearchOffersUseCaseProtocol, Sendable {
@@ -11,7 +11,7 @@ final class SearchOffersUseCase: SearchOffersUseCaseProtocol, Sendable {
         self.searchResultsRepository = searchResultsRepository
     }
 
-    func execute(query: String, lat: Double?, lng: Double?) async throws(AppError) -> [SearchOffer] {
-        try await searchResultsRepository.search(query: query, lat: lat, lng: lng)
+    func execute(query: String, lat: Double?, lng: Double?, lang: String) async throws(AppError) -> [SearchOffer] {
+        try await searchResultsRepository.search(query: query, lat: lat, lng: lng, lang: lang)
     }
 }

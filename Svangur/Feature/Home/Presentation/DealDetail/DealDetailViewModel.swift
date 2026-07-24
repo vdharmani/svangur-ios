@@ -13,7 +13,10 @@ final class DealDetailViewModel: ObservableObject {
         self.getDealDetailUseCase = getDealDetailUseCase
     }
 
-    func onAppear() async {
+    private var currentLang: String = AppLanguage.english.rawValue
+
+    func onAppear(lang: String) async {
+        currentLang = lang
         guard state == .idle else { return }
         await load()
     }
@@ -22,10 +25,20 @@ final class DealDetailViewModel: ObservableObject {
         await load()
     }
 
+    /// `.task { }` on `DealDetailScreen` only fires once per view identity — toggling the
+    /// language flag mid-session needs this separate hook so the deal re-fetches in the new
+    /// language instead of staying stuck. Bypasses `onAppear`'s `state == .idle` guard since
+    /// the deal is normally already loaded by the time the language changes.
+    func onLanguageChange(lang: String) async {
+        guard lang != currentLang else { return }
+        currentLang = lang
+        await load()
+    }
+
     private func load() async {
         state = .loading
         do throws(AppError) {
-            let deal = try await getDealDetailUseCase.execute(id: dealId)
+            let deal = try await getDealDetailUseCase.execute(id: dealId, lang: currentLang)
             state = .loaded(deal.toDealDetail())
         } catch {
             state = .error(error.displayMessage)
@@ -48,7 +61,7 @@ extension DealDetailViewModel {
 }
 
 private struct FakeGetDealDetailUseCase: GetDealDetailUseCaseProtocol {
-    func execute(id: Int64) async throws(AppError) -> DealListing {
+    func execute(id: Int64, lang: String) async throws(AppError) -> DealListing {
         DealDetailUi.previewDealListing
     }
 }

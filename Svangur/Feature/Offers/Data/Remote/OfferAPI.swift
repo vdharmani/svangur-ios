@@ -4,7 +4,7 @@ import Foundation
 /// `/api/api` segment (the base URL already ends in `/api`, and Android's Retrofit paths here
 /// have no extra leading `api/`).
 enum OfferEndpoint: Endpoint {
-    case listOffers(page: Int, limit: Int)
+    case listOffers(page: Int, limit: Int, lang: String? = nil)
     case getOffer(id: Int64)
     /// `body`/`boundary` are precomputed by the repository (which owns the
     /// `MultipartFormData` build), same pattern as `EditRestaurantEndpoint`/`ImageEndpoint`.
@@ -46,11 +46,15 @@ enum OfferEndpoint: Endpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .listOffers(let page, let limit):
-            return [
+        case .listOffers(let page, let limit, let lang):
+            var items = [
                 URLQueryItem(name: "page", value: String(page)),
                 URLQueryItem(name: "limit", value: String(limit))
             ]
+            if let lang {
+                items.append(URLQueryItem(name: "lang", value: lang))
+            }
+            return items
         default:
             return nil
         }

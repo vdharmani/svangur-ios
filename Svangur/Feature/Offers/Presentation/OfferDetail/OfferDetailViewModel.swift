@@ -18,6 +18,7 @@ final class OfferDetailViewModel: ObservableObject {
 
     private let getOfferUseCase: GetOfferUseCaseProtocol
     private let deleteOfferUseCase: DeleteOfferUseCaseProtocol
+    private var currentLang: String = AppLanguage.english.rawValue
 
     init(
         offerId: Int64,
@@ -29,11 +30,21 @@ final class OfferDetailViewModel: ObservableObject {
         self.deleteOfferUseCase = deleteOfferUseCase
     }
 
-    func onAppear() async {
+    func onAppear(lang: String) async {
+        currentLang = lang
         await load()
     }
 
     func refresh() async {
+        await load()
+    }
+
+    /// `.task { }` on `OfferDetailScreen` only fires once per view identity — toggling the
+    /// language flag mid-session needs this separate hook so the offer's bilingual
+    /// title/description re-map to the new language instead of staying stuck.
+    func onLanguageChange(lang: String) async {
+        guard lang != currentLang else { return }
+        currentLang = lang
         await load()
     }
 
@@ -56,7 +67,7 @@ final class OfferDetailViewModel: ObservableObject {
         state = .loading
         do throws(AppError) {
             let offer = try await getOfferUseCase.execute(id: offerId)
-            state = .loaded(offer.toUi())
+            state = .loaded(offer.toUi(for: AppLanguage(rawValue: currentLang) ?? .english))
         } catch {
             state = .error(error.displayMessage)
         }

@@ -11,6 +11,8 @@ struct AddOfferScreen: View {
 
     @State private var showCategorySheet = false
     @State private var showDiscountSheet = false
+    @State private var showStartTimeSheet = false
+    @State private var showEndTimeSheet = false
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showLibraryPicker = false
@@ -18,10 +20,13 @@ struct AddOfferScreen: View {
     @State private var pendingPhotoSource: PhotoSource?
 
     @FocusState private var focusedField: Field?
+    @State private var scrollProxy: ScrollViewProxy?
     private enum Field: Hashable { case title, description }
     private enum PhotoSource {
         case camera, library
     }
+    private let imagesSectionAnchor = "imagesSection"
+    private let validTimeSectionAnchor = "validTimeSection"
 
     init(viewModel: AddOfferViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -159,24 +164,26 @@ struct AddOfferScreen: View {
     private var form: some View {
         VStack(spacing: 0) {
             customHeader
-            ScrollView {
-                VStack(alignment: .leading, spacing: SvSpacing.sectionSpacing) {
-                    imagesSection
-                    titleSection
-                    descriptionSection
-                    categorySection
-                    discountSection
-                    validDaysSection
-                    validTimeSection
-                    Spacer(minLength: SvSpacing.xxxl)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SvSpacing.sectionSpacing) {
+                        imagesSection
+                            .id(imagesSectionAnchor)
+                        titleSection
+                        descriptionSection
+                        categorySection
+                        discountSection
+                        validDaysSection
+                        validTimeSection
+                        saveBar
+                    }
+                    .padding(.horizontal, SvSpacing.screenPadding)
+                    .padding(.top, SvSpacing.sm)
+                    .padding(.bottom, SvSpacing.xxxl)
                 }
-                .padding(.horizontal, SvSpacing.screenPadding)
-                .padding(.top, SvSpacing.sm)
+                .scrollDismissesKeyboard(.interactively)
+                .onAppear { scrollProxy = proxy }
             }
-            .scrollDismissesKeyboard(.interactively)
-        }
-        .safeAreaInset(edge: .bottom) {
-            saveBar
         }
     }
 
@@ -277,6 +284,8 @@ struct AddOfferScreen: View {
                 .padding(.top, 6)
                 .padding(.trailing, 6)
             }
+
+            FieldErrorText(field: .images, error: viewModel.displayError(for: .images))
         }
     }
 
@@ -373,40 +382,87 @@ struct AddOfferScreen: View {
         VStack(alignment: .leading, spacing: SvSpacing.lg) {
             sectionLabel("Valid Time")
             HStack(spacing: SvSpacing.md) {
-                TimePickerField(time: Binding(
-                    get: { viewModel.draft.validTimeStart },
-                    set: {
-                        viewModel.markTouched(.validTime)
-                        viewModel.draft.validTimeStart = $0
-                    }
-                ))
+                TimePickerField(
+                    time: Binding(
+                        get: { viewModel.draft.validTimeStart },
+                        set: {
+                            viewModel.markTouched(.validTime)
+                            viewModel.draft.validTimeStart = $0
+                        }
+                    ),
+                    placeholderTime: TimeOfDay(hour: 11, minute: 0),
+                    isPresented: $showStartTimeSheet
+                )
                 Text("–")
                     .font(SvFont.title)
                     .foregroundStyle(Color.svOnBackground)
-                TimePickerField(time: Binding(
-                    get: { viewModel.draft.validTimeEnd },
-                    set: {
-                        viewModel.markTouched(.validTime)
-                        viewModel.draft.validTimeEnd = $0
-                    }
-                ))
+                TimePickerField(
+                    time: Binding(
+                        get: { viewModel.draft.validTimeEnd },
+                        set: {
+                            viewModel.markTouched(.validTime)
+                            viewModel.draft.validTimeEnd = $0
+                        }
+                    ),
+                    placeholderTime: TimeOfDay(hour: 15, minute: 0),
+                    isPresented: $showEndTimeSheet
+                )
             }
             FieldErrorText(field: .validTime, error: viewModel.displayError(for: .validTime))
         }
+        .id(validTimeSectionAnchor)
     }
 
     private var saveBar: some View {
         SvPrimaryButton(
             title: viewModel.mode.isEdit ? "Update Offer" : "Save Offer",
-            isLoading: viewModel.loadState == .saving,
-            isEnabled: viewModel.isValid && viewModel.loadState != .saving
+            isLoading: viewModel.loadState == .saving
         ) {
-            viewModel.onTapPreview()
+            handleSaveTap()
         }
-        .padding(.horizontal, SvSpacing.screenPadding)
         .padding(.top, SvSpacing.xs)
-        .padding(.bottom, SvSpacing.xl)
-        .background(Color.svBackground)
+    }
+
+    /// Mirrors `RegisterRestaurantScreen`'s "Continue" flow: run full validation, and if it
+    /// fails, jump the user straight to the first invalid field in on-screen order. Text fields
+    /// get keyboard focus; the image field (not a text input) just needs to be visible, so it
+    /// scrolls into view instead — it never grabs the keyboard.
+    private func handleSaveTap() {
+        viewModel.onTapPreview()
+        guard !viewModel.isValid else { return }
+        focusFirstInvalidField()
+    }
+
+    private func focusFirstInvalidField() {
+        if viewModel.validation.images != nil {
+            withAnimation { scrollProxy?.scrollTo(imagesSectionAnchor, anchor: .top) }
+        } else if viewModel.validation.title != nil {
+            focusedField = .title
+        } else if viewModel.validation.description != nil {
+            focusedField = .description
+        } else if viewModel.validation.category != nil {
+            // No keyboard-focusable control — its inline error message is the only feedback.
+        } else if viewModel.validation.discount != nil {
+            // No keyboard-focusable control — its inline error message is the only feedback.
+        } else if viewModel.validation.validDays != nil {
+            // No keyboard-focusable control — its inline error message is the only feedback.
+        } else if viewModel.validation.validTime != nil {
+            withAnimation { scrollProxy?.scrollTo(validTimeSectionAnchor, anchor: .center) }
+            openFirstInvalidTimeField()
+        }
+    }
+
+    /// Opens the time picker sheet for whichever of Start/End Time is still unset — mirrors the
+    /// text-field focus behavior above, but a `DatePicker` sheet has no `@FocusState`/keyboard
+    /// concept, so "focus" here means presenting its picker instead. If both times are already
+    /// set (the field is only invalid because end isn't after start), there's no single field to
+    /// reopen — the inline error message already explains the fix needed.
+    private func openFirstInvalidTimeField() {
+        if viewModel.draft.validTimeStart == nil {
+            showStartTimeSheet = true
+        } else if viewModel.draft.validTimeEnd == nil {
+            showEndTimeSheet = true
+        }
     }
 
     private func sectionLabel(_ text: LocalizedStringKey) -> some View {
@@ -623,33 +679,43 @@ private struct DayChip: View {
 }
 
 private struct TimePickerField: View {
-    @Binding var time: TimeOfDay
-    @State private var showSheet = false
+    /// `nil` until the user picks a time — the placeholder text is shown in its place until then.
+    @Binding var time: TimeOfDay?
+    /// Also seeds the picker's initial dial position when opened with no time selected yet.
+    let placeholderTime: TimeOfDay
+    @Binding var isPresented: Bool
 
     var body: some View {
-        Button { showSheet = true } label: {
-            Text(String(format: "%02d:%02d", time.hour, time.minute))
-                .font(SvFont.body)
-                .foregroundStyle(Color.svOnBackground)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, SvSpacing.lg)
-                .frame(height: 48)
-                .background(
-                    RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                        .fill(Color.svFieldBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                        .stroke(Color.svPrimary, lineWidth: 1)
-                )
+        Button { isPresented = true } label: {
+            Group {
+                if let time {
+                    Text(time.formatted24h)
+                        .foregroundStyle(Color.svOnBackground)
+                } else {
+                    Text(placeholderTime.formatted24h)
+                        .foregroundStyle(Color.svSecondary)
+                }
+            }
+            .font(SvFont.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SvSpacing.lg)
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                    .fill(Color.svFieldBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                    .stroke(Color.svPrimary, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showSheet) {
+        .sheet(isPresented: $isPresented) {
             NavigationStack {
                 DatePicker(
                     "",
                     selection: Binding(
-                        get: { Self.dateFromTime(time) },
+                        get: { Self.dateFromTime(time ?? placeholderTime) },
                         set: { time = Self.timeFromDate($0) }
                     ),
                     displayedComponents: .hourAndMinute
@@ -660,7 +726,7 @@ private struct TimePickerField: View {
                 .padding(.top, SvSpacing.lg)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") { showSheet = false }
+                        Button("Done") { isPresented = false }
                     }
                 }
             }
@@ -707,7 +773,8 @@ private struct FieldErrorText: View {
         case .category:    return "Please select a category"
         case .discount:    return "Please select a discount"
         case .validDays:   return "Please select at least one valid day"
-        case .validTime:   return "Please choose a valid time range"
+        case .validTime:   return "Please set a time."
+        case .images:      return "Please upload an offer image."
         }
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 enum AddOfferField: Hashable, CaseIterable {
-    case title, description, category, discount, validDays, validTime
+    case title, description, category, discount, validDays, validTime, images
 }
 
 @MainActor
@@ -36,7 +36,7 @@ final class AddOfferViewModel: ObservableObject {
     @Published private(set) var days: [DayItem] = []
 
     @Published var draft: OfferDraft = .empty {
-        didSet { revalidate() }
+        didSet { revalidateIfTouched() }
     }
 
     let mode: AddOfferMode
@@ -85,6 +85,7 @@ final class AddOfferViewModel: ObservableObject {
         case .discount:   return validation.discount
         case .validDays:  return validation.validDays
         case .validTime:  return validation.validTime
+        case .images:     return validation.images
         }
     }
 
@@ -162,10 +163,12 @@ final class AddOfferViewModel: ObservableObject {
 
     func addImage(_ url: URL) {
         guard displayImageUrls.count < ValidateOfferDraftUseCase.maxImageCount else { return }
+        markTouched(.images)
         draft.imageUris.append(url)
     }
 
     func removeImage(at index: Int) {
+        markTouched(.images)
         if index < draft.existingImageUrls.count {
             draft.existingImageUrls.remove(at: index)
             if index < draft.existingImageIds.count {
@@ -201,6 +204,15 @@ final class AddOfferViewModel: ObservableObject {
     func setEveryDay() {
         markTouched(.validDays)
         draft.validDays = Set(Weekday.allCases)
+    }
+
+    /// Mirrors `RegisterRestaurantViewModel`'s pattern: validation only actually runs once the
+    /// user has attempted a Save (or Preview) — every field edit before that is a no-op here, so
+    /// no error surfaces until the user taps Save Offer. After that first attempt, edits
+    /// re-validate live so fixed fields clear their errors immediately.
+    private func revalidateIfTouched() {
+        guard hasAttemptedSave else { return }
+        revalidate()
     }
 
     private func revalidate() {
@@ -313,7 +325,7 @@ private struct FakeDealRepository: DealRepositoryProtocol {
     func listOwnerCategories(lang: String) async throws(AppError) -> [DealCategory] { [] }
     func listDiscountFilters(lang: String) async throws(AppError) -> [DiscountUserFilter] { [] }
     func listOwnerDiscountOptions(lang: String) async throws(AppError) -> [DiscountOwnerOption] { [] }
-    func getDeal(id: String) async throws(AppError) -> DealListing {
+    func getDeal(id: String, lang: String?) async throws(AppError) -> DealListing {
         throw .notFound()
     }
     func trackView(id: String) async throws(AppError) {}

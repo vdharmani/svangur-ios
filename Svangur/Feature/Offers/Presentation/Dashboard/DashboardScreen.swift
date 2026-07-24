@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject var viewModel: DashboardViewModel
     @State private var isViewingProfileImage = false
 
@@ -35,7 +36,10 @@ struct DashboardScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .svErrorBanner(viewModel.actionErrorMessage)
-        .task { await viewModel.onAppear() }
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        .onChange(of: languageService.current) { newValue in
+            Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
+        }
         .blur(radius: viewModel.offerIdToDelete != nil ? 2 : 0)
         .overlay {
             if viewModel.offerIdToDelete != nil {
@@ -115,6 +119,8 @@ struct DashboardScreen: View {
                         Text(profile.name)
                             .font(SvFont.mainLabel)
                             .foregroundStyle(Color.black)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         statsRow
                     }
                 }
@@ -193,7 +199,7 @@ struct DashboardScreen: View {
         return "0"
     }
 
-    private func statItem(value: String, label: String) -> some View {
+    private func statItem(value: String, label: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: SvSpacing.xxs) {
             Text(value)
                 .font(SvFont.label)
@@ -571,10 +577,11 @@ private struct ProfileImageViewer: View {
 #Preview("Dashboard - Loaded") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(
-            state: .loaded(MockOfferRepository.seed.map { $0.toUi() })
+            state: .loaded(MockOfferRepository.seed.map { $0.toUi(for: .english) })
         ))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Dashboard - Loading") {
@@ -582,6 +589,7 @@ private struct ProfileImageViewer: View {
         DashboardScreen(viewModel: .previewInstance(state: .loading))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Dashboard - Empty") {
@@ -589,6 +597,7 @@ private struct ProfileImageViewer: View {
         DashboardScreen(viewModel: .previewInstance(state: .empty))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Dashboard - Error") {
@@ -596,14 +605,16 @@ private struct ProfileImageViewer: View {
         DashboardScreen(viewModel: .previewInstance(state: .error("Network error")))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Dashboard - Wide (no break)") {
     NavigationStack {
         DashboardScreen(viewModel: .previewInstance(
-            state: .loaded(MockOfferRepository.seed.map { $0.toUi() })
+            state: .loaded(MockOfferRepository.seed.map { $0.toUi(for: .english) })
         ))
         .frame(width: 1024, height: 1366)
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }

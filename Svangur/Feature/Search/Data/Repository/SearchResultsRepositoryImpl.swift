@@ -7,19 +7,19 @@ final class SearchResultsRepositoryImpl: SearchResultsRepositoryProtocol, Sendab
         self.apiClient = apiClient
     }
 
-    func search(query: String, lat: Double?, lng: Double?) async throws(AppError) -> [SearchOffer] {
+    func search(query: String, lat: Double?, lng: Double?, lang: String?) async throws(AppError) -> [SearchOffer] {
         try await apiCall {
             let envelope: SearchResponseEnvelopeDTO = try await apiClient.execute(
-                SearchEndpoint.search(query: query, lat: lat, lng: lng)
+                SearchEndpoint.search(query: query, lat: lat, lng: lng, lang: lang)
             )
             return envelope.data.items.map { $0.toDomain() }
         }
     }
 
-    func searchByLocation(query: String, lat: Double, lng: Double) async throws(AppError) -> [SearchOffer] {
+    func searchByLocation(query: String, lat: Double, lng: Double, lang: String?) async throws(AppError) -> [SearchOffer] {
         try await apiCall {
             let envelope: SearchResponseEnvelopeDTO = try await apiClient.execute(
-                SearchEndpoint.searchByLocation(query: query, lat: lat, lng: lng)
+                SearchEndpoint.searchByLocation(query: query, lat: lat, lng: lng, lang: lang)
             )
             return envelope.data.items.map { $0.toDomain() }
         }

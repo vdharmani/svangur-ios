@@ -190,7 +190,11 @@ struct EditRestaurantScreen: View {
                         )
                         if filtered != newValue { viewModel.nameEn = filtered }
                     }
-                fieldErrorText(viewModel.validation.nameEn, emptyMessage: "Please enter restaurant name")
+                fieldErrorText(
+                    viewModel.validation.nameEn,
+                    emptyMessage: "Please enter restaurant name",
+                    tooShortMessage: "Name must be at least 3 characters."
+                )
             }
             if viewModel.isIcelandicNameSelected {
                 pinkTextField(text: $viewModel.nameIs, autocapitalization: .words)
@@ -200,7 +204,11 @@ struct EditRestaurantScreen: View {
                         )
                         if filtered != newValue { viewModel.nameIs = filtered }
                     }
-                fieldErrorText(viewModel.validation.nameIs, emptyMessage: "Please enter restaurant name")
+                fieldErrorText(
+                    viewModel.validation.nameIs,
+                    emptyMessage: "Please enter restaurant name",
+                    tooShortMessage: "Name must be at least 3 characters."
+                )
             }
         }
     }
@@ -305,19 +313,27 @@ struct EditRestaurantScreen: View {
     }
 
     @ViewBuilder
-    private func fieldErrorText(_ error: ValidationError?, emptyMessage: LocalizedStringKey) -> some View {
-        if let key = errorKey(for: error, emptyMessage: emptyMessage) {
+    private func fieldErrorText(
+        _ error: ValidationError?,
+        emptyMessage: LocalizedStringKey,
+        tooShortMessage: LocalizedStringKey? = nil
+    ) -> some View {
+        if let key = errorKey(for: error, emptyMessage: emptyMessage, tooShortMessage: tooShortMessage) {
             Text(key)
                 .font(.caption)
                 .foregroundStyle(Color.svError)
         }
     }
 
-    private func errorKey(for error: ValidationError?, emptyMessage: LocalizedStringKey) -> LocalizedStringKey? {
+    private func errorKey(
+        for error: ValidationError?,
+        emptyMessage: LocalizedStringKey,
+        tooShortMessage: LocalizedStringKey? = nil
+    ) -> LocalizedStringKey? {
         guard let error else { return nil }
         switch error {
         case .empty:            return emptyMessage
-        case .tooShort(let m):  return "Must be at least \(m) characters"
+        case .tooShort(let m):  return tooShortMessage ?? "Must be at least \(m) characters"
         case .tooLong(let m):   return "Must be \(m) characters or fewer"
         case .invalidFormat:    return "Please enter a valid value"
         case .custom(let key):  return LocalizedStringKey(key)
@@ -376,7 +392,7 @@ struct EditRestaurantScreen: View {
 
     // MARK: - Language chip (mirrors RegisterRestaurantScreen's chip styling)
 
-    private func languageChip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func languageChip(_ title: LocalizedStringKey, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Text(title)

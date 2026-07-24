@@ -120,6 +120,8 @@ struct SettingsScreen: View {
                 Text(viewModel.profile?.name ?? "Restaurant Name")
                     .font(SvFont.titleMedium)
                     .foregroundStyle(Color.svOnBackground)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .redacted(reason: viewModel.profile == nil ? .placeholder : [])
                 
                 Button {

@@ -10,6 +10,10 @@ final class DIContainer: Sendable {
     let locationService: LocationServiceProtocol
     let placesService: PlacesServiceProtocol
     let selectedLocationStore: SelectedLocationStoreProtocol
+    /// Shared app-wide so the GPS fetch kicked off at launch (`SvangurApp`'s splash) and the one
+    /// `HomeViewModel.onAppear` triggers are the same cached/in-flight fetch — see
+    /// `GetCurrentLocationUseCase`'s doc comment.
+    let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
     private let sharedAuthRepository: AuthRepositoryProtocol
     private let sharedOfferRepository: OfferRepositoryProtocol
 
@@ -19,13 +23,17 @@ final class DIContainer: Sendable {
         keychainManager: KeychainManagerProtocol = KeychainManager(),
         locationService: LocationServiceProtocol = LocationService(),
         placesService: PlacesServiceProtocol = PlacesService(),
-        selectedLocationStore: SelectedLocationStoreProtocol = SelectedLocationStore()
+        selectedLocationStore: SelectedLocationStoreProtocol = SelectedLocationStore(),
+        getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol? = nil
     ) {
         self.networkMonitor = networkMonitor
         self.keychainManager = keychainManager
         self.locationService = locationService
         self.placesService = placesService
         self.selectedLocationStore = selectedLocationStore
+        // Can't reference the `locationService` parameter from a default-parameter expression
+        // (see the `apiClient` note below), so it's resolved here instead.
+        self.getCurrentLocationUseCase = getCurrentLocationUseCase ?? GetCurrentLocationUseCase(locationService: locationService)
         // `apiClient`'s default can't reference the `keychainManager` parameter directly (Swift
         // default-parameter expressions can't see sibling parameters), so it's built here
         // instead — ensures APIClient and AuthRepositoryImpl share the exact same Keychain
@@ -134,10 +142,15 @@ final class DIContainer: Sendable {
         GetHomeDealsUseCase(dealRepository: makeDealRepository())
     }
 
+    func makeGetMapPinsUseCase() -> GetMapPinsUseCaseProtocol {
+        GetMapPinsUseCase(dealRepository: makeDealRepository())
+    }
+
     @MainActor
     func makeHomeViewModel() -> HomeViewModel {
         HomeViewModel(
             getHomeDealsUseCase: makeGetHomeDealsUseCase(),
+            getMapPinsUseCase: makeGetMapPinsUseCase(),
             getCurrentLocationUseCase: makeGetCurrentLocationUseCase(),
             dealRepository: makeDealRepository(),
             getDaysUseCase: makeGetDaysUseCase(),
@@ -147,7 +160,7 @@ final class DIContainer: Sendable {
     }
 
     func makeGetCurrentLocationUseCase() -> GetCurrentLocationUseCaseProtocol {
-        GetCurrentLocationUseCase(locationService: locationService)
+        getCurrentLocationUseCase
     }
 
     @MainActor
@@ -168,6 +181,7 @@ final class DIContainer: Sendable {
         ConfirmLocationViewModel(
             placesService: placesService,
             selectedLocationStore: selectedLocationStore,
+            locationService: locationService,
             name: name,
             placeID: placeID
         )

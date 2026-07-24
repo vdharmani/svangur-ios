@@ -18,6 +18,7 @@ final class DashboardViewModel: ObservableObject {
 
     private var currentPage = 1
     private let pageSize = 20
+    private var currentLang: String = AppLanguage.english.rawValue
 
     private let getMyOffersUseCase: GetMyOffersUseCaseProtocol
     private let deleteOfferUseCase: DeleteOfferUseCaseProtocol
@@ -38,7 +39,8 @@ final class DashboardViewModel: ObservableObject {
     /// the first time; every later appearance (e.g. returning from Add/Edit Offer, which may
     /// reuse this same ViewModel instance via NavigationStack) re-fetches quietly in the
     /// background so new/edited offers show up without re-flickering the whole list.
-    func onAppear() async {
+    func onAppear(lang: String) async {
+        currentLang = lang
         await refreshProfile()
         switch state {
         case .idle:
@@ -46,6 +48,15 @@ final class DashboardViewModel: ObservableObject {
         default:
             await reloadQuietly()
         }
+    }
+
+    /// `.task { }` on `DashboardScreen` only fires once per view identity — toggling the
+    /// language flag mid-session needs this separate hook so the offers list re-fetches (and
+    /// re-maps its bilingual title/description) in the new language instead of staying stuck.
+    func onLanguageChange(lang: String) async {
+        guard lang != currentLang else { return }
+        currentLang = lang
+        await reloadQuietly()
     }
 
     func refresh() async {
@@ -86,13 +97,13 @@ final class DashboardViewModel: ObservableObject {
         state = .loading
         currentPage = 1
         do throws(AppError) {
-            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize)
+            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize, lang: currentLang)
             hasNextPage = result.hasNextPage
             currentPage = result.nextPage ?? 1
             if result.items.isEmpty {
                 state = .empty
             } else {
-                state = .loaded(result.items.map { $0.toUi() })
+                state = .loaded(result.items.map { $0.toUi(for: language) })
             }
         } catch {
             state = .error(error.displayMessage)
@@ -102,10 +113,10 @@ final class DashboardViewModel: ObservableObject {
     private func reloadQuietly() async {
         currentPage = 1
         do throws(AppError) {
-            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize)
+            let result = try await getMyOffersUseCase.execute(page: 1, limit: pageSize, lang: currentLang)
             hasNextPage = result.hasNextPage
             currentPage = result.nextPage ?? 1
-            state = result.items.isEmpty ? .empty : .loaded(result.items.map { $0.toUi() })
+            state = result.items.isEmpty ? .empty : .loaded(result.items.map { $0.toUi(for: language) })
         } catch {
             // Silent background refresh — keep whatever was already on screen rather than
             // clobbering good data with an error banner.
@@ -117,14 +128,18 @@ final class DashboardViewModel: ObservableObject {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do throws(AppError) {
-            let result = try await getMyOffersUseCase.execute(page: currentPage, limit: pageSize)
+            let result = try await getMyOffersUseCase.execute(page: currentPage, limit: pageSize, lang: currentLang)
             hasNextPage = result.hasNextPage
             currentPage = result.nextPage ?? currentPage
-            state = .loaded(existing + result.items.map { $0.toUi() })
+            state = .loaded(existing + result.items.map { $0.toUi(for: language) })
         } catch {
             // Keep the existing page visible; `hasNextPage` stays true so scrolling back to the
             // last row retries — no separate append-error surface exists on this screen yet.
         }
+    }
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: currentLang) ?? .english
     }
 
     private func refreshProfile() async {
@@ -155,7 +170,7 @@ extension DashboardViewModel {
 }
 
 private struct FakeGetMyOffersUseCase: GetMyOffersUseCaseProtocol {
-    func execute(page: Int, limit: Int) async throws(AppError) -> PaginatedResult<Offer> {
+    func execute(page: Int, limit: Int, lang: String) async throws(AppError) -> PaginatedResult<Offer> {
         PaginatedResult(items: MockOfferRepository.seed, hasNextPage: false, nextPage: nil)
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SearchScreen: View {
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var languageService: LanguageService
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @StateObject var viewModel: SearchViewModel
     @FocusState private var isSearchFocused: Bool
@@ -34,7 +35,10 @@ struct SearchScreen: View {
         )
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await viewModel.onAppear() }
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        .onChange(of: languageService.current) { newValue in
+            Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
+        }
         .onAppear { isSearchFocused = true }
     }
     
@@ -344,6 +348,7 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Search - Searching") {
@@ -352,6 +357,7 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Search - Error") {
@@ -362,6 +368,7 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Search - No Results") {
@@ -372,6 +379,7 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Search - Results") {
@@ -404,6 +412,7 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
 }
 
 #Preview("Search - Wide (no break)") {
@@ -422,5 +431,6 @@ struct SearchScreen: View {
     }
     .environmentObject(AppRouter())
     .environmentObject(UserSession(authRepository: MockAuthRepository()))
+    .environmentObject(LanguageService())
     .frame(width: 1024, height: 1366)
 }

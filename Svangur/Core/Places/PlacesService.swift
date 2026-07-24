@@ -1,6 +1,11 @@
 import Foundation
 import CoreLocation
 import GooglePlacesSwift
+import os
+
+private extension Logger {
+    static let places = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Svangur", category: "places")
+}
 
 protocol PlacesServiceProtocol: Sendable {
     /// Address autocomplete suggestions for the given (partial) query text — scoped to one
@@ -33,6 +38,7 @@ actor PlacesService: PlacesServiceProtocol {
                 return PlaceSuggestion(id: place.placeID, description: place.legacyAttributedFullText.string)
             }
         case .failure(let error):
+            Logger.places.error("autocomplete failed: \(String(describing: error), privacy: .public)")
             throw error.toAppError()
         }
     }
@@ -50,6 +56,7 @@ actor PlacesService: PlacesServiceProtocol {
             let city = components.first { $0.types.contains(.locality) }?.name
                 ?? components.first { $0.types.contains(.postalTown) }?.name
             let country = components.first { $0.types.contains(.country) }?.name
+            Logger.places.debug("placeDetails resolved \(placeID, privacy: .public) -> \(place.location.latitude), \(place.location.longitude)")
             return PlaceDetails(
                 formattedAddress: place.formattedAddress,
                 city: city,
@@ -58,6 +65,7 @@ actor PlacesService: PlacesServiceProtocol {
                 longitude: place.location.longitude
             )
         case .failure(let error):
+            Logger.places.error("placeDetails failed for \(placeID, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error.toAppError()
         }
     }

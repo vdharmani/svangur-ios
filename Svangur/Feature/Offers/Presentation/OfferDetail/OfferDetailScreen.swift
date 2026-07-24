@@ -4,6 +4,7 @@ struct OfferDetailScreen: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var languageService: LanguageService
     @StateObject var viewModel: OfferDetailViewModel
 
     @State private var showDeleteConfirm = false
@@ -99,7 +100,10 @@ struct OfferDetailScreen: View {
             Text("This action cannot be undone.")
         }
         .svErrorBanner(viewModel.actionErrorMessage)
-        .task { await viewModel.onAppear() }
+        .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        .onChange(of: languageService.current) { newValue in
+            Task { await viewModel.onLanguageChange(lang: newValue.rawValue) }
+        }
     }
 
     @ViewBuilder
@@ -199,10 +203,11 @@ private struct DetailRow: View {
 #Preview("Detail - Loaded") {
     NavigationStack {
         OfferDetailScreen(viewModel: .previewInstance(
-            state: .loaded(MockOfferRepository.seed[0].toUi())
+            state: .loaded(MockOfferRepository.seed[0].toUi(for: .english))
         ))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Detail - Loading") {
@@ -210,6 +215,7 @@ private struct DetailRow: View {
         OfferDetailScreen(viewModel: .previewInstance(state: .loading))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }
 
 #Preview("Detail - Error") {
@@ -217,4 +223,5 @@ private struct DetailRow: View {
         OfferDetailScreen(viewModel: .previewInstance(state: .error("Not found")))
     }
     .environmentObject(AppRouter())
+    .environmentObject(LanguageService())
 }

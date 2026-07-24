@@ -21,7 +21,7 @@ extension AppError {
         case .network:
             return "error_network"
         case .server(let code, _):
-            return "Server error: \(code)"
+            return "\(code)"
         case .unauthorized:
             return "error_session_expired"
         case .notFound:
@@ -44,7 +44,7 @@ extension AppError {
     var displayMessage: String {
         switch self {
         case .network(let message): return message
-        case .server(let code, let message): return "Server error \(code): \(message)"
+        case .server(let code, let message): return "\(message)"
         case .unauthorized(let message): return message
         case .notFound(let message): return message
         case .validation(let message): return message

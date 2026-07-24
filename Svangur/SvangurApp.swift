@@ -32,6 +32,12 @@ struct SvangurApp: App {
                 .environmentObject(router)
                 .environmentObject(session)
                 .environmentObject(languageService)
+                // Bridges the in-app language toggle (`LanguageService`, unrelated to the
+                // device's system language) into SwiftUI's localization lookup — without this,
+                // `Text("...")`/`Localizable.xcstrings` always resolve against the system
+                // locale, so toggling the flag in the header would only affect API `lang=`
+                // params (server-returned data) and never the static UI chrome.
+                .environment(\.locale, Locale(identifier: languageService.current.rawValue))
                 .preferredColorScheme(.light)
                 .onOpenURL { url in
                     router.handle(url)
@@ -55,11 +61,16 @@ private struct RootView: View {
                         await session.bootstrap()
                         splashFinished = true
                     }
-                    // Requested at launch per explicit product decision — doesn't block the
-                    // splash → app transition; the system permission dialog can be answered
-                    // (or dismissed) while the rest of startup proceeds.
+                    // Kicked off at launch, in parallel with the splash animation and session
+                    // bootstrap, so `HomeViewModel.onAppear` doesn't have to wait for a fresh
+                    // permission-check → GPS fix → reverse-geocode round trip once the user is
+                    // already looking at Home. `getCurrentLocationUseCase` is a shared, caching
+                    // singleton (see its doc comment), so this fetch's result — or the
+                    // still-in-flight task itself — is exactly what Home consumes. Fire-and-forget:
+                    // doesn't block the splash → app transition, and the system permission dialog
+                    // can be answered (or dismissed) while the rest of startup proceeds.
                     Task {
-                        _ = await container.locationService.requestWhenInUseAuthorization()
+                        _ = try? await container.getCurrentLocationUseCase.execute()
                     }
                 }
             } else {

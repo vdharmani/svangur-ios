@@ -14,6 +14,7 @@ final class SearchViewModel: ObservableObject {
     private let searchOffersUseCase: SearchOffersUseCaseProtocol
     private let getCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol
     private var currentLocation: LocationSnapshot?
+    private var currentLang: String = AppLanguage.english.rawValue
 
     /// `nonisolated(unsafe)`: only ever mutated from `@MainActor` methods, except for the
     /// `cancel()` call in `deinit` — see `SelectLocationViewModel.searchTask` for the same
@@ -38,12 +39,28 @@ final class SearchViewModel: ObservableObject {
 
     // MARK: - Lifecycle
 
-    func onAppear() async {
+    func onAppear(lang: String) async {
+        currentLang = lang
         guard currentLocation == nil else { return }
         do throws(AppError) {
             currentLocation = try await getCurrentLocationUseCase.execute()
         } catch {
             currentLocation = nil
+        }
+    }
+
+    /// `.task { }` on `SearchScreen` only fires once per view identity — toggling the language
+    /// flag mid-session needs this separate hook so an already-visible result set re-fetches in
+    /// the new language instead of staying stuck.
+    func onLanguageChange(lang: String) async {
+        guard lang != currentLang else { return }
+        currentLang = lang
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        searchTask?.cancel()
+        state = .searching
+        searchTask = Task { [weak self] in
+            await self?.performSearch(trimmed)
         }
     }
 
@@ -95,7 +112,8 @@ final class SearchViewModel: ObservableObject {
             let offers = try await searchOffersUseCase.execute(
                 query: searchText,
                 lat: currentLocation?.latitude,
-                lng: currentLocation?.longitude
+                lng: currentLocation?.longitude,
+                lang: currentLang
             )
             // The user may have kept typing (or cleared the field) while this request was in
             // flight — only apply results that still match the current text.
@@ -148,7 +166,7 @@ extension SearchViewModel {
 }
 
 private struct FakeSearchOffersUseCase: SearchOffersUseCaseProtocol {
-    func execute(query: String, lat: Double?, lng: Double?) async throws(AppError) -> [SearchOffer] { [] }
+    func execute(query: String, lat: Double?, lng: Double?, lang: String) async throws(AppError) -> [SearchOffer] { [] }
 }
 
 private struct FakeGetCurrentLocationUseCase: GetCurrentLocationUseCaseProtocol {

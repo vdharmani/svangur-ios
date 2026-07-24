@@ -80,10 +80,10 @@ final class DealRepositoryImpl: DealRepositoryProtocol, Sendable {
         }
     }
 
-    func getDeal(id: String) async throws(AppError) -> DealListing {
+    func getDeal(id: String, lang: String?) async throws(AppError) -> DealListing {
         try await apiCall {
             let envelope: DealEnvelopeDTO = try await apiClient.execute(
-                DealEndpoint.getDeal(id: id, lang: nil, lat: nil, lng: nil, deviceId: nil)
+                DealEndpoint.getDeal(id: id, lang: lang, lat: nil, lng: nil, deviceId: nil)
             )
             return envelope.data.toDomain()
         }

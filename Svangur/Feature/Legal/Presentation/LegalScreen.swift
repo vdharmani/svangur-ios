@@ -12,12 +12,16 @@ struct LegalScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            languageToggle
 
             switch viewModel.state {
             case .idle, .loading:
                 loadingState
             case .loaded(let html):
-                SvHTMLWebView(html: html, baseURL: nil)
+                // The backend bakes its own `.lang-switch` anchor links into this HTML, but
+                // they're dead in a WKWebView loaded via `loadHTMLString(_:baseURL: nil)` — hide
+                // them so `languageToggle` above is the only (functional) language control shown.
+                SvHTMLWebView(html: html + "<style>.lang-switch{display:none}</style>", baseURL: nil)
             case .error(let message):
                 errorState(message)
             }
@@ -26,6 +30,52 @@ struct LegalScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.onAppear(lang: languageService.current.rawValue) }
+        .onChange(of: languageService.current) { _ in
+            Task { await viewModel.refresh(lang: languageService.current.rawValue) }
+        }
+    }
+
+    // MARK: - Language toggle
+
+    private var languageToggle: some View {
+        HStack(spacing: SvSpacing.sm) {
+            languagePill(title: "English", isSelected: languageService.current == .english) {
+                setLanguage(.english)
+            }
+            languagePill(title: "Íslenska", isSelected: languageService.current == .icelandic) {
+                setLanguage(.icelandic)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, SvSpacing.screenPadding)
+        .padding(.top, SvSpacing.md)
+    }
+
+    private func languagePill(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+        } label: {
+            Text(title)
+                .font(SvFont.captionStrong)
+                .foregroundStyle(isSelected ? Color.svOnPrimary : Color.svOnBackground)
+                .padding(.horizontal, SvSpacing.lg)
+                .padding(.vertical, SvSpacing.sm)
+                .background(
+                    Capsule().fill(isSelected ? Color.svPrimary : Color.svOnPrimary)
+                )
+                .overlay(
+                    Capsule().stroke(Color.svDivider, lineWidth: isSelected ? 0 : 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private func setLanguage(_ language: AppLanguage) {
+        guard languageService.current != language else { return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            languageService.toggle()
+        }
     }
 
     private var header: some View {
