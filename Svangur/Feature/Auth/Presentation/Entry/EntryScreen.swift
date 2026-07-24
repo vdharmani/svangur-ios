@@ -3,7 +3,8 @@ import SwiftUI
 struct EntryScreen: View {
     let onLogin: () -> Void
     let onSignup: () -> Void
-    
+    let onBack: () -> Void
+
     var body: some View {
         // The action card lives in the main VStack flow (NOT in .overlay) so
         // SwiftUI computes a real gap between the tagline and the card —
@@ -56,8 +57,27 @@ struct EntryScreen: View {
             }
             .ignoresSafeArea()
         }
+        .overlay(alignment: .topLeading) {
+            backButton
+                .padding(.horizontal, SvSpacing.screenPadding)
+                .padding(.top, SvSpacing.sm)
+        }
     }
-    
+
+    // MARK: - Back button
+
+    private var backButton: some View {
+        Button(action: onBack) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.black)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(.white))
+                .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
+        }
+        .accessibilityLabel("Back")
+    }
+
     // MARK: - Tagline font scales mildly with screen width
     
     private func taglineFont(for width: CGFloat) -> Font {
@@ -114,21 +134,21 @@ private extension Comparable {
 }
 
 #Preview("Entry — iPhone SE 3") {
-    EntryScreen(onLogin: {}, onSignup: {})
+    EntryScreen(onLogin: {}, onSignup: {}, onBack: {})
         .frame(width: 375, height: 667)
 }
 
 #Preview("Entry — iPhone 15") {
-    EntryScreen(onLogin: {}, onSignup: {})
+    EntryScreen(onLogin: {}, onSignup: {}, onBack: {})
         .frame(width: 393, height: 852)
 }
 
 #Preview("Entry — iPhone 15 Pro Max") {
-    EntryScreen(onLogin: {}, onSignup: {})
+    EntryScreen(onLogin: {}, onSignup: {}, onBack: {})
         .frame(width: 430, height: 932)
 }
 
 #Preview("Entry — iPad") {
-    EntryScreen(onLogin: {}, onSignup: {})
+    EntryScreen(onLogin: {}, onSignup: {}, onBack: {})
         .frame(width: 820, height: 1180)
 }

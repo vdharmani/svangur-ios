@@ -98,7 +98,11 @@ private struct RootView: View {
         case .entry:
             EntryScreen(
                 onLogin:  { router.navigate(to: .login) },
-                onSignup: { router.navigate(to: .registerRestaurant) }
+                onSignup: { router.navigate(to: .registerRestaurant) },
+                // `.entry` is only ever pushed from `HomeScreen` (the NavigationStack's root),
+                // so popping the stack — not pushing a new `.home` route — is what returns to
+                // Home without stacking a duplicate instance on top.
+                onBack: { router.pop() }
             )
         case .forgotPassword:
             ForgotPasswordScreen(viewModel: container.makeForgotPasswordViewModel())

@@ -30,6 +30,18 @@ enum Weekday: Int, Sendable, Equatable, CaseIterable, Identifiable, Comparable {
         case .sunday:    return "Sun"
         }
     }
+
+    var fullName: String {
+        switch self {
+        case .monday:    return "Monday"
+        case .tuesday:   return "Tuesday"
+        case .wednesday: return "Wednesday"
+        case .thursday:  return "Thursday"
+        case .friday:    return "Friday"
+        case .saturday:  return "Saturday"
+        case .sunday:    return "Sunday"
+        }
+    }
 }
 
 // MARK: - Wire day codes ("mon"..."sun")

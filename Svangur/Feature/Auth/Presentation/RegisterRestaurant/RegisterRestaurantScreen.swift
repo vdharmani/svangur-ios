@@ -580,12 +580,13 @@ struct RegisterRestaurantScreen: View {
             Text("Opening Hours")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.svOnBackground)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                VStack(spacing: 8) {
-                    ForEach(Weekday.allCases) { day in
-                        openingHourRow(for: day)
-                    }
+
+            // Each day gets its own `ScrollView` (instead of one shared scroll container for the
+            // whole table) so dragging one day's row can never move — or borrow scroll state
+            // from — any other day's row.
+            VStack(spacing: 8) {
+                ForEach(Weekday.allCases) { day in
+                    openingHourRow(for: day)
                 }
             }
 
@@ -600,48 +601,52 @@ struct RegisterRestaurantScreen: View {
     @ViewBuilder
     private func openingHourRow(for day: Weekday) -> some View {
         let schedule = viewModel.openingHours[day] ?? .standardOpen
-        HStack(spacing: 12) {
-            Text(day.shortName)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.svOnBackground)
-                .frame(width: 35, alignment: .leading)
-                .fixedSize()
+        let isInvalid = viewModel.invalidOpeningHoursDays.contains(day)
 
-            TimeChip(time: schedule.openTime, isEnabled: schedule.isOpen) { newTime in
-                viewModel.setOpenTime(newTime, for: day)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                Text(day.shortName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.svOnBackground)
+                    .frame(width: 35, alignment: .leading)
+                    .fixedSize()
+
+                TimeChip(time: schedule.openTime, isEnabled: schedule.isOpen) { newTime in
+                    viewModel.setOpenTime(newTime, for: day)
+                }
+
+                Text("to")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(Color.svSecondary)
+                    .fixedSize()
+
+                TimeChip(time: schedule.closeTime, isEnabled: schedule.isOpen) { newTime in
+                    viewModel.setCloseTime(newTime, for: day)
+                }
+
+                Text("Closed")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(Color.svSecondary)
+                    .fixedSize()
+
+                SvCompactToggle(isOn: Binding(
+                    get: { !schedule.isOpen },
+                    set: { _ in viewModel.toggleDayOpen(day) }
+                ))
+                .accessibilityLabel("\(day.shortName) is \(schedule.isOpen ? "open" : "closed")")
             }
-
-            Text("to")
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(Color.svSecondary)
-                .fixedSize()
-
-            TimeChip(time: schedule.closeTime, isEnabled: schedule.isOpen) { newTime in
-                viewModel.setCloseTime(newTime, for: day)
-            }
-
-            Text("Closed")
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(Color.svSecondary)
-                .fixedSize()
-
-            SvCompactToggle(isOn: Binding(
-                get: { !schedule.isOpen },
-                set: { _ in viewModel.toggleDayOpen(day) }
-            ))
-            .accessibilityLabel("\(day.shortName) is \(schedule.isOpen ? "open" : "closed")")
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isInvalid ? Color.svError : Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: isInvalid ? 1.5 : 1)
+            )
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(height: 48)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: 1)
-        )
     }
     
     // MARK: - Document section

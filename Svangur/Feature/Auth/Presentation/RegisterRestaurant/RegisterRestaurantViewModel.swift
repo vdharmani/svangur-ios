@@ -180,9 +180,15 @@ final class RegisterRestaurantViewModel: ObservableObject {
     }
 
     // MARK: - Schedule mutators
-    /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day — displayed
-    /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
+    /// Set when `toggleDayOpen(_:)` refuses to close the last remaining open day, OR when
+    /// `submit()` finds a day whose Close Time isn't after its Open Time — displayed under the
+    /// Opening Hours table, cleared as soon as the underlying problem is resolved.
     @Published private(set) var openingHoursError: String?
+
+    /// Enabled days whose Close Time is at or before their Open Time — populated by `submit()`,
+    /// and re-checked after every edit once non-empty so fixing a flagged day clears its
+    /// highlight live. Drives the red highlight on each invalid day's row.
+    @Published private(set) var invalidOpeningHoursDays: Set<Weekday> = []
 
     func toggleDayOpen(_ day: Weekday) {
         var schedule = openingHours[day] ?? .standardOpen
@@ -196,18 +202,56 @@ final class RegisterRestaurantViewModel: ObservableObject {
         openingHoursError = nil
         schedule.isOpen.toggle()
         openingHours[day] = schedule
+        refreshOpeningHoursValidationIfNeeded()
     }
 
     func setOpenTime(_ time: HourMinute, for day: Weekday) {
         var schedule = openingHours[day] ?? .standardOpen
         schedule.openTime = time
         openingHours[day] = schedule
+        refreshOpeningHoursValidationIfNeeded()
     }
 
     func setCloseTime(_ time: HourMinute, for day: Weekday) {
         var schedule = openingHours[day] ?? .standardOpen
         schedule.closeTime = time
         openingHours[day] = schedule
+        refreshOpeningHoursValidationIfNeeded()
+    }
+
+    /// Re-runs the opening-hours time-range check after an edit — but only once `submit()` has
+    /// already surfaced it, so fixing a flagged day's times clears its highlight/message
+    /// immediately instead of requiring another Save tap. Never runs before the first Save
+    /// attempt, matching this screen's existing "errors appear on submit, then update live"
+    /// pattern (see `hasAttemptedFinalSubmit`).
+    private func refreshOpeningHoursValidationIfNeeded() {
+        guard !invalidOpeningHoursDays.isEmpty else { return }
+        let stillInvalid = Self.invalidOpeningHoursDays(in: openingHours)
+        invalidOpeningHoursDays = Set(stillInvalid)
+        openingHoursError = stillInvalid.isEmpty ? nil : Self.openingHoursErrorMessage(for: stillInvalid)
+    }
+
+    /// Enabled days (in Monday–Sunday order) whose Close Time isn't after their Open Time.
+    private static func invalidOpeningHoursDays(in schedule: [Weekday: DaySchedule]) -> [Weekday] {
+        func minutes(_ t: HourMinute) -> Int { t.hour * 60 + t.minute }
+        return Weekday.allCases.filter { day in
+            guard let daySchedule = schedule[day], daySchedule.isOpen else { return false }
+            return minutes(daySchedule.closeTime) <= minutes(daySchedule.openTime)
+        }
+    }
+
+    private static func openingHoursErrorMessage(for days: [Weekday]) -> String {
+        let names = days.map(\.fullName)
+        let joined: String
+        switch names.count {
+        case 1:
+            joined = names[0]
+        case 2:
+            joined = "\(names[0]) and \(names[1])"
+        default:
+            joined = names.dropLast().joined(separator: ", ") + ", and \(names.last ?? "")"
+        }
+        return "Please fix the invalid opening hours for \(joined)."
     }
 
     // MARK: - Image / document mutators
@@ -258,7 +302,14 @@ final class RegisterRestaurantViewModel: ObservableObject {
         hasAttemptedSubmit = true
         hasAttemptedFinalSubmit = true
         revalidate()
-        guard validation.isValid else { return }
+
+        let invalidDays = Self.invalidOpeningHoursDays(in: openingHours)
+        invalidOpeningHoursDays = Set(invalidDays)
+        if !invalidDays.isEmpty {
+            openingHoursError = Self.openingHoursErrorMessage(for: invalidDays)
+        }
+
+        guard validation.isValid, invalidDays.isEmpty else { return }
 
         state = .submitting
         // Best-effort — prompts for permission if not yet determined. A denial or failed fix
