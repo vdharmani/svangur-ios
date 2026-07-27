@@ -183,6 +183,11 @@ final class ValidateCredentialsUseCase: ValidateCredentialsUseCaseProtocol, Send
         let trimmed = email.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .empty }
         guard trimmed.wholeMatch(of: Self.emailPattern) != nil else { return .invalidFormat }
+        // `emailPattern`'s local-part character class allows repeated `.`s (e.g.
+        // `name...last@gmail.com`, `john..doe@example.com`), which isn't a valid local part per
+        // RFC 5321/5322 — reject those explicitly rather than loosening the regex itself.
+        let localPart = trimmed.split(separator: "@", maxSplits: 1).first ?? Substring(trimmed)
+        guard !localPart.contains("..") else { return .invalidFormat }
         return nil
     }
 

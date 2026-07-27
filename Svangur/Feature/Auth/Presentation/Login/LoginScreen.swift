@@ -15,30 +15,51 @@ struct LoginScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            // White screen background
-            Color.svBackground.ignoresSafeArea()
+        // The background layers live INSIDE the ScrollView's content (not as fixed layers
+        // behind it) so the whole screen — background, curved header, and form — scrolls as one
+        // unit once the keyboard opens, instead of the background staying static while only the
+        // foreground content moves.
+        //
+        // `ScrollView` reserves a top content inset for the safe area by default, EVEN when a
+        // child inside it (like the background/header below) declares `.ignoresSafeArea()` —
+        // that inset is what shows up as blank white space above the header while scrolling.
+        // Making the `ScrollView` itself ignore the top safe area removes that reserved inset,
+        // but then nothing inside it is safe-area-padded automatically anymore — so `topInset`
+        // (captured before the `ScrollView` swallows that info) is added back by hand: as extra
+        // height on the pink shape, and as top padding on the page content, so both render at
+        // exactly the same size/position as they did before this fix.
+        GeometryReader { proxy in
+            let topInset = proxy.safeAreaInsets.top
 
-            // Pink gradient header with concave-up curved bottom edge
-            CurvedHeaderShape()
-                .fill(SvLoginHeaderGradient.fill)
-                .frame(height: 287)
-                .shadow(color: .black.opacity(0.078), radius: 11, x: 0, y: -6)
-                .ignoresSafeArea(edges: .top)
-
-            // Page content — respects the top safe area, same as ForgotPasswordScreen,
-            // so the back button lands in the same screen position on both screens.
-            // Wrapped in a ScrollView so the form (and the Login button) can be scrolled
-            // into view once the keyboard covers them — previously this was a bare VStack,
-            // which can't scroll and left fields/button hidden behind the keyboard.
             ScrollView {
-                VStack(spacing: 25) {
-                    header
-                    form
-                    Spacer(minLength: 0)
+                ZStack(alignment: .top) {
+                    // White screen background — now unclipped all the way to the true top of the
+                    // screen, so no gap appears above the header while scrolling.
+                    Color.svBackground
+
+                    // Pink gradient header with concave-up curved bottom edge — same 287pt
+                    // visual height as before, plus the inset the ScrollView no longer reserves,
+                    // so it still bleeds under the status bar/notch exactly as it did previously.
+                    CurvedHeaderShape()
+                        .fill(SvLoginHeaderGradient.fill)
+                        .frame(height: 287 + topInset)
+                        .shadow(color: .black.opacity(0.078), radius: 11, x: 0, y: -6)
+
+                    // Page content — padded down by the inset the ScrollView no longer reserves,
+                    // so the back button lands in the same screen position as before (and as
+                    // ForgotPasswordScreen).
+                    VStack(spacing: 25) {
+                        header
+                        form
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, topInset)
                 }
+                .frame(minHeight: proxy.size.height)
             }
+            .ignoresSafeArea(edges: .top)
             .scrollDismissesKeyboard(.interactively)
+            .onTapGesture { focusedField = nil }
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
