@@ -693,7 +693,7 @@ private struct TimePickerField: View {
                         .foregroundStyle(Color.svOnBackground)
                 } else {
                     Text(placeholderTime.formatted24h)
-                        .foregroundStyle(Color.svSecondary)
+                        .foregroundStyle(Color.svPlaceholder)
                 }
             }
             .font(SvFont.body)

@@ -80,7 +80,7 @@ struct DealDetailScreen: View {
     private func heroImage(_ deal: DealDetailUi) -> some View {
         Color.clear
             .frame(maxWidth: .infinity)
-            .frame(height: 320)
+            .frame(height: 423)
             .overlay {
                 remoteImage(deal.heroImageUrl)
             }
@@ -125,9 +125,11 @@ struct DealDetailScreen: View {
                 .font(SvFont.heading)
                 .foregroundStyle(.white)
 
-            HStack(spacing: SvSpacing.xs) {
-                Image("tag")
-                    .font(.system(size: 12))
+            HStack(spacing: SvSpacing.sm) {
+                Image("ic_mark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 14, height: 14)
                 Text(deal.categoryLabel)
                     .font(SvFont.bodySmall)
             }
@@ -218,10 +220,6 @@ struct DealDetailScreen: View {
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SvSpacing.lg)
-                .background(
-                    Color.svFieldBackground,
-                    in: RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
-                )
         }
         .padding(.horizontal, 20)
     }
