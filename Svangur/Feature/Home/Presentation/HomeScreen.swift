@@ -56,10 +56,17 @@ struct HomeScreen: View {
 
     private var listContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: SvSpacing.xl) {
+            VStack(alignment: .leading, spacing: 0) {
                 categoriesSection
+                    .padding(.bottom, SvSpacing.xl)
                 discountSection
+                    .padding(.bottom, SvSpacing.xl)
+                // `daysSection`'s horizontal ScrollView already carries 6pt of vertical padding
+                // internally (so the day chips' drop shadow isn't clipped at the scroll edges) —
+                // subtract it here so the visible gap before "All Deals" matches every other
+                // section gap instead of reading larger.
                 daysSection
+                    .padding(.bottom, SvSpacing.xl - 6)
                 dealsSection
             }
             .padding(.top, SvSpacing.xxl)
@@ -185,11 +192,11 @@ struct HomeScreen: View {
             .padding(.horizontal, SvSpacing.lg)
             .frame(height: SvSpacing.inputHeight)
             .background(
-                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                     .fill(Color.svPink)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                     .stroke(Color.svDivider, lineWidth: 1.5)
             )
         }
@@ -774,6 +781,7 @@ struct HomeScreen: View {
                     Text("Open now")
                         .font(SvFont.labelTitleSmall)
                         .foregroundStyle(Color.svLabel)
+                        .textCase(.uppercase)
 
                     SvCompactToggle(isOn: .init(
                         get: { viewModel.openNowOnly },

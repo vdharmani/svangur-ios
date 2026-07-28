@@ -82,8 +82,12 @@ struct SvConfirmationDialog: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: SvSpacing.buttonHeight)
                         .background(
-                            Color.svFieldBackground,
-                            in: RoundedRectangle(cornerRadius: SvSpacing.buttonRadius)
+                            RoundedRectangle(cornerRadius: SvSpacing.buttonRadius)
+                                .fill(Color.svPrimary.opacity(0.15))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: SvSpacing.buttonRadius)
+                                        .stroke(Color.svPrimary.opacity(0.10), lineWidth: 1)
+                                )
                         )
                 }
                 .buttonStyle(.plain)

@@ -289,7 +289,10 @@ final class DIContainer: Sendable {
         OfferDetailViewModel(
             offerId: offerId,
             getOfferUseCase: makeGetOfferUseCase(),
-            deleteOfferUseCase: makeDeleteOfferUseCase()
+            deleteOfferUseCase: makeDeleteOfferUseCase(),
+            getOfferAnalyticsUseCase: makeGetOfferAnalyticsUseCase(),
+            getRestaurantProfileUseCase: makeGetRestaurantProfileUseCase(),
+            dealRepository: makeDealRepository()
         )
     }
 

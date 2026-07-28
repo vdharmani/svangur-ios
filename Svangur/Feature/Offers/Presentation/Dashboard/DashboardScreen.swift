@@ -119,8 +119,8 @@ struct DashboardScreen: View {
                         Text(profile.name)
                             .font(SvFont.mainLabel)
                             .foregroundStyle(Color.black)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                         statsRow
                     }
                 }

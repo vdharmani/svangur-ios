@@ -422,21 +422,17 @@ struct EditRestaurantScreen: View {
         VStack(alignment: .leading, spacing: SvSpacing.sm) {
             Text("Restaurant Images")
                 .font(SvFont.label)
-                .foregroundStyle(Color.svOnBackground)
+                .foregroundStyle(Color.svPrimary)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SvSpacing.md) {
                     Button {
                         showPhotoSourceSheet = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Color.svPrimary)
+                        Image("RestaurantImagesPlaceHoder")
+                            .resizable()
+                            .scaledToFit()
                             .frame(width: 90, height: 90)
-                            .background(
-                                RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                                    .fill(Color.svImagePlaceholder)
-                            )
                     }
                     .accessibilityLabel("Add restaurant image")
 
