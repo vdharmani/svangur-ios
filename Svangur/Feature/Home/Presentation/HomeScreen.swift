@@ -129,7 +129,7 @@ struct HomeScreen: View {
                                 viewModel.toggleViewMode()
                             }
                         } label: {
-                            Image(viewModel.viewMode == .list ? "ic_Svlocation" : "ic_list")
+                            Image("ic_Svlocation")
                                 .frame(width: 30, height: 30)
                         }
                         Button {
