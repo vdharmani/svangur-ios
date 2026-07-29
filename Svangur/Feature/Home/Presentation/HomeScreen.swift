@@ -19,6 +19,26 @@ struct HomeScreen: View {
         span: HomeScreen.mapSpan
     )
 
+    // Measured *height* of the currently-rendered deal popup card, used to anchor it above the
+    // selected marker (see `popupAnchor(for:mapSize:cardHeight:)`). Seeded with the card's known
+    // `minHeight` so the very first popup placement (before the real measurement lands via
+    // `MapDealCardHeightPreferenceKey`) is already close, instead of momentarily sitting on top
+    // of the marker. Width is NOT measured — see `mapDealCardWidth` below for why.
+    @State private var mapDealCardHeight: CGFloat = 130
+
+    private static let mapMarkerWidth: CGFloat = 44
+    private static let mapMarkerHeight = mapMarkerWidth * (200.0 / 167.0)
+
+    // Fixed "place card" width (not the full map width) — this is what makes horizontal
+    // anchoring possible at all. A card spanning nearly the full screen leaves the clamp in
+    // `popupAnchor` almost no room to move (its min/max collapse to the same center point),
+    // so on a wide card any attempt to actually track the marker's x position pushed it
+    // off-screen. A narrower, Google-Maps-style card gives the clamp real travel room while
+    // guaranteeing (by construction, not by racing an async size measurement) that it always
+    // stays fully on-screen.
+    private static let mapDealCardWidth: CGFloat = 260
+    private static let mapDealCardHorizontalMargin: CGFloat = SvSpacing.md
+
     init(viewModel: HomeViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
     }
@@ -209,67 +229,100 @@ struct HomeScreen: View {
     private var mapContent: some View {
         let clusters = MapCluster.clustering(viewModel.mapPins, region: mapRegion)
 
-        return ZStack(alignment: .bottom) {
-            Group {
-                if #available(iOS 17, *) {
-                    // `MapCameraPosition` is iOS 17+ only, so it can't back a stored property on
-                    // this pre-iOS-17-deployment-target screen — this binding wraps/unwraps it
-                    // around `mapRegion` (the actual `@State`) on the fly, only inside this branch.
-                    Map(position: Binding<MapCameraPosition>(
-                        get: { .region(mapRegion) },
-                        set: { newPosition in
-                            if let region = newPosition.region {
-                                mapRegion = region
+        // Wrapped in `GeometryReader` (rather than measuring the `Map` itself) so the popup's
+        // anchor math has a stable pixel size to convert map coordinates against — see
+        // `screenPoint(for:in:)` / `popupAnchor(for:mapSize:cardSize:)` below. The reader itself
+        // (not just the `Map` inside it) ignores the bottom safe area so `geo.size` matches the
+        // `Map`'s actual rendered bounds exactly, keeping the anchor math accurate all the way
+        // to the bottom edge.
+        return GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if #available(iOS 17, *) {
+                        // `MapCameraPosition` is iOS 17+ only, so it can't back a stored property on
+                        // this pre-iOS-17-deployment-target screen — this binding wraps/unwraps it
+                        // around `mapRegion` (the actual `@State`) on the fly, only inside this branch.
+                        Map(position: Binding<MapCameraPosition>(
+                            get: { .region(mapRegion) },
+                            set: { newPosition in
+                                if let region = newPosition.region {
+                                    mapRegion = region
+                                }
+                            }
+                        )) {
+                            ForEach(clusters) { cluster in
+                                Annotation(clusterLabel(cluster), coordinate: cluster.coordinate) {
+                                    mapAnnotationView(cluster)
+                                }
                             }
                         }
-                    )) {
-                        ForEach(clusters) { cluster in
-                            Annotation(clusterLabel(cluster), coordinate: cluster.coordinate) {
+                        .mapControls {
+                            MapUserLocationButton()
+                            MapCompass()
+                        }
+                        // The position binding's `set` above only fires when `newPosition.region`
+                        // is non-nil, but `MapCameraPosition` frequently represents live user
+                        // interaction (pinch/pan) in a form where `.region` is nil — silently
+                        // dropping the update and leaving `mapRegion` (and clustering, which reads
+                        // its span) stuck at the initial value forever. `onMapCameraChange` reports
+                        // the actual region reliably on every camera change instead. This also
+                        // drives the popup anchor, so it keeps tracking its marker live while
+                        // panning/zooming.
+                        .onMapCameraChange { context in
+                            mapRegion = context.region
+                        }
+                    } else {
+                        // iOS 16 fallback — the legacy `Map(coordinateRegion:...)` initializer has no
+                        // equivalent for `.mapControls` (compass / user-location button), so those are
+                        // simply omitted here. Pin rendering + selection behavior is unchanged.
+                        Map(
+                            coordinateRegion: $mapRegion,
+                            interactionModes: .all,
+                            annotationItems: clusters
+                        ) { cluster in
+                            MapAnnotation(coordinate: cluster.coordinate) {
                                 mapAnnotationView(cluster)
                             }
                         }
                     }
-                    .mapControls {
-                        MapUserLocationButton()
-                        MapCompass()
-                    }
-                    // The position binding's `set` above only fires when `newPosition.region`
-                    // is non-nil, but `MapCameraPosition` frequently represents live user
-                    // interaction (pinch/pan) in a form where `.region` is nil — silently
-                    // dropping the update and leaving `mapRegion` (and clustering, which reads
-                    // its span) stuck at the initial value forever. `onMapCameraChange` reports
-                    // the actual region reliably on every camera change instead.
-                    .onMapCameraChange { context in
-                        mapRegion = context.region
-                    }
-                } else {
-                    // iOS 16 fallback — the legacy `Map(coordinateRegion:...)` initializer has no
-                    // equivalent for `.mapControls` (compass / user-location button), so those are
-                    // simply omitted here. Pin rendering + selection behavior is unchanged.
-                    Map(
-                        coordinateRegion: $mapRegion,
-                        interactionModes: .all,
-                        annotationItems: clusters
-                    ) { cluster in
-                        MapAnnotation(coordinate: cluster.coordinate) {
-                            mapAnnotationView(cluster)
-                        }
-                    }
                 }
-            }
-            .ignoresSafeArea(edges: .bottom)
+                // Annotation `Button`s consume their own tap before it reaches this gesture, so
+                // this only fires for taps on empty map area — deselecting the pin and dismissing
+                // the popup, same as tapping outside a Google Maps place card.
+                .onTapGesture {
+                    viewModel.selectPin(nil)
+                }
 
-            if let selected = viewModel.selectedPin {
-                Button {
-                    router.navigate(to: .dealDetail(dealId: selected.id))
-                } label: {
-                    mapDealCard(selected)
+                if let selected = viewModel.selectedPin {
+                    let anchor = popupAnchor(for: selected, mapSize: geo.size, cardHeight: mapDealCardHeight)
+
+                    // Same `Button`/`mapDealCard` instance stays mounted across marker switches
+                    // (the `if let` only toggles on nil <-> non-nil, not on which pin is selected),
+                    // so re-selecting a different marker animates this view to its new `anchor`
+                    // instead of tearing it down and recreating it.
+                    Button {
+                        router.navigate(to: .dealDetail(dealId: selected.id))
+                    } label: {
+                        mapDealCard(selected)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: mapDealCardWidth(in: geo.size.width))
+                    .background(
+                        GeometryReader { cardGeo in
+                            Color.clear
+                                .preference(key: MapDealCardHeightPreferenceKey.self, value: cardGeo.size.height)
+                        }
+                    )
+                    .position(anchor)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 }
-                .buttonStyle(.plain)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .padding(.horizontal, SvSpacing.screenPadding)
-                .padding(.bottom, SvSpacing.xxxl)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .onPreferenceChange(MapDealCardHeightPreferenceKey.self) { height in
+            guard height > 0 else { return }
+            mapDealCardHeight = height
         }
         .animation(.easeInOut(duration: 0.25), value: viewModel.selectedPin)
         // `mapContent` is only mounted once `viewMode == .map`, by which point location has
@@ -289,6 +342,77 @@ struct HomeScreen: View {
             center: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude),
             span: Self.mapSpan
         )
+    }
+
+    /// Approximates the on-screen position of a map coordinate for the current `mapRegion` and
+    /// viewport size. SwiftUI's `Map` has no public projection API pre-iOS 17 (`MapReader`/
+    /// `MapProxy` are iOS 17+ only, and this screen still supports iOS 16 — see the `mapContent`
+    /// fallback branch above), so this uses a linear equirectangular approximation instead. At
+    /// the zoom levels Svangur's map operates in (region spans well under 1°), the distortion
+    /// this introduces is negligible — accurate enough to anchor a popup to its marker.
+    private func screenPoint(for coordinate: CLLocationCoordinate2D, in size: CGSize) -> CGPoint {
+        let latDelta = mapRegion.span.latitudeDelta
+        let lonDelta = mapRegion.span.longitudeDelta
+        guard latDelta > 0, lonDelta > 0, size.width > 0, size.height > 0 else {
+            return CGPoint(x: size.width / 2, y: size.height / 2)
+        }
+
+        let xRatio = (coordinate.longitude - mapRegion.center.longitude) / lonDelta
+        let yRatio = (mapRegion.center.latitude - coordinate.latitude) / latDelta
+
+        return CGPoint(
+            x: size.width * (0.5 + xRatio),
+            y: size.height * (0.5 + yRatio)
+        )
+    }
+
+    /// The popup's actual rendered width — capped at `mapDealCardWidth` but never wider than the
+    /// map itself has room for (with margin on both sides). `popupAnchor` clamps against this
+    /// exact same value, so the two can never disagree about how wide the card is.
+    private func mapDealCardWidth(in mapWidth: CGFloat) -> CGFloat {
+        min(Self.mapDealCardWidth, max(mapWidth - Self.mapDealCardHorizontalMargin * 2, 0))
+    }
+
+    /// Places the popup card's center just above the selected marker (its bottom edge sits
+    /// `SvSpacing.sm` above the marker's top edge), then clamps so the card never renders
+    /// outside the visible map area — e.g. a marker near a screen edge still gets a fully
+    /// on-screen popup instead of one clipped by the bounds. The horizontal clamp is derived
+    /// from `mapDealCardWidth(in:)` — the same fixed-width calculation the card's `.frame(width:)`
+    /// uses — rather than an async-measured size, so there's no frame where the two disagree and
+    /// the card is drawn wider than the clamp assumes (which is what let it clip off-screen).
+    private func popupAnchor(for pin: DealMapPin, mapSize: CGSize, cardHeight: CGFloat) -> CGPoint {
+        let markerPoint = screenPoint(
+            for: CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude),
+            in: mapSize
+        )
+        let markerHalfHeight = Self.mapMarkerHeight / 2
+        let cardHalfWidth = mapDealCardWidth(in: mapSize.width) / 2
+        let cardHalfHeight = cardHeight / 2
+        let gap = SvSpacing.sm
+
+        let rawX = markerPoint.x
+        let rawY = markerPoint.y - markerHalfHeight - gap - cardHalfHeight
+
+        let minX = cardHalfWidth + Self.mapDealCardHorizontalMargin
+        let maxX = max(minX, mapSize.width - cardHalfWidth - Self.mapDealCardHorizontalMargin)
+        let minY = cardHalfHeight + SvSpacing.md
+        let maxY = max(minY, mapSize.height - cardHalfHeight - SvSpacing.md)
+
+        return CGPoint(
+            x: min(max(rawX, minX), maxX),
+            y: min(max(rawY, minY), maxY)
+        )
+    }
+
+    /// Reports the rendered height of the currently-visible `mapDealCard` back up to `mapContent`
+    /// so `popupAnchor(for:mapSize:cardHeight:)` can center it vertically (SwiftUI has no way to
+    /// query a sibling/child's laid-out size other than round-tripping it through a preference).
+    /// Only height is tracked — width is fixed by `mapDealCardWidth(in:)`, see its comment.
+    private struct MapDealCardHeightPreferenceKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
     }
 
     private func clusterLabel(_ cluster: MapCluster) -> String {
@@ -356,8 +480,8 @@ struct HomeScreen: View {
     /// so the offer photo drops precisely into that cutout regardless of the marker's
     /// on-screen size.
     private func mapMarkerImage(url: URL?) -> some View {
-        let markerWidth: CGFloat = 44
-        let markerHeight = markerWidth * (200.0 / 167.0)
+        let markerWidth = Self.mapMarkerWidth
+        let markerHeight = Self.mapMarkerHeight
         let circleDiameter = markerWidth * 0.64
         let circleTopInset = markerHeight * 0.145
 

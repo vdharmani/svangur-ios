@@ -154,7 +154,7 @@ struct SelectLocationScreen: View {
                 Image("ic_recentTime")
                     .font(.system(size: 14))
 
-                Text(item.displayName)
+                Text(item.shortDisplayName)
                     .font(SvFont.bodySmall)
             }
             .padding(.horizontal, SvSpacing.md)

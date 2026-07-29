@@ -26,7 +26,7 @@ final class SelectLocationViewModel: ObservableObject {
     nonisolated(unsafe) private var searchTask: Task<Void, Never>?
 
     private static let recentSearchesKey = "recent_location_searches"
-    private static let maxRecentSearches = 10
+    private static let maxRecentSearches = 5
 
     private let placesService: PlacesServiceProtocol
 
