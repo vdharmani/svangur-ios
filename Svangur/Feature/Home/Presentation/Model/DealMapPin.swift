@@ -13,6 +13,8 @@ struct DealMapPin: Identifiable, Equatable, Sendable {
     let imageUrl: URL?
     let validTimeText: String
     let distance: String
+    /// Whether the restaurant is open right now — drives the map popup's "Open now" badge.
+    let isOpenNow: Bool
 }
 
 extension DealMapPin {
@@ -27,7 +29,8 @@ extension DealMapPin {
             discountBadge: "20%",
             imageUrl: nil,
             validTimeText: "Tue – Fri 17:00 – 21:00",
-            distance: "1.2 km"
+            distance: "1.2 km",
+            isOpenNow: true
         ),
         DealMapPin(
             id: 2,
@@ -39,7 +42,8 @@ extension DealMapPin {
             discountBadge: "2-for-1",
             imageUrl: nil,
             validTimeText: "Mon – Thu 11:30 – 14:00",
-            distance: "0.8 km"
+            distance: "0.8 km",
+            isOpenNow: true
         ),
         DealMapPin(
             id: 3,
@@ -51,7 +55,8 @@ extension DealMapPin {
             discountBadge: "30%",
             imageUrl: nil,
             validTimeText: "Wed 11:00 – 22:00",
-            distance: "2.1 km"
+            distance: "2.1 km",
+            isOpenNow: true
         ),
         DealMapPin(
             id: 4,
@@ -63,7 +68,8 @@ extension DealMapPin {
             discountBadge: "Free",
             imageUrl: nil,
             validTimeText: "Fri – Sat 18:00 – 22:00",
-            distance: "1.5 km"
+            distance: "1.5 km",
+            isOpenNow: false
         ),
         DealMapPin(
             id: 5,
@@ -75,7 +81,8 @@ extension DealMapPin {
             discountBadge: "25%",
             imageUrl: nil,
             validTimeText: "Every day 12:00 – 15:00",
-            distance: "3.0 km"
+            distance: "3.0 km",
+            isOpenNow: true
         ),
     ]
 }

@@ -14,6 +14,7 @@ import SwiftUI
 //   Color.svOnBackground      primary text
 //   Color.svSecondary         secondary text / placeholders
 //   Color.svError             error text and indicators
+//   Color.svSuccess           success/positive indicators (e.g. "Open now" badge)
 //   Color.svDivider           hairline dividers
 //   Color.svShimmer           skeleton / placeholder fill
 //   Color.svFieldBackground   text-field background

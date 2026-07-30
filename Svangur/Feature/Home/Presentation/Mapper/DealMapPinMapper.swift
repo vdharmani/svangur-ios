@@ -16,7 +16,8 @@ extension DealListing {
             discountBadge: customDiscountText ?? "",
             imageUrl: heroImageUrl.flatMap(URL.init(string:)),
             validTimeText: "\(dealCardTime(validTimeStart))–\(dealCardTime(validTimeEnd))",
-            distance: distanceKm.map { String(format: "%.1f km", $0) } ?? ""
+            distance: distanceKm.map { String(format: "%.1f km", $0) } ?? "",
+            isOpenNow: isOpenNow ?? false
         )
     }
 }

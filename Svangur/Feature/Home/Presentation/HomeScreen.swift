@@ -21,30 +21,35 @@ struct HomeScreen: View {
     // Single source of truth for the map's center — `MKCoordinateRegion` is available pre-iOS 17,
     // unlike `MapCameraPosition` (iOS 17+ only), so it can't be a stored property's type here.
     // The iOS 17+ `Map(position:)` binding below wraps/unwraps this region on the fly instead.
+    // The fallback seed is INERT: the map itself isn't rendered until a real location resolves
+    // (see `mapContent`'s gate), so this coordinate is never visible to the user.
     @State private var mapRegion = MKCoordinateRegion(
         center: HomeScreen.fallbackMapCoordinate,
         span: HomeScreen.mapSpan
     )
 
+    // Set the first time the map centers on a REAL location (GPS fix or manually confirmed).
+    // Once true, re-appearing (e.g. returning from Deal Details) never re-centers — `mapRegion`
+    // keeps whatever pan/zoom the user last had. Only an actual location *change* (via
+    // `onChange(of: viewModel.currentLocation)`) moves the map after this point.
+    @State private var hasCenteredMapOnUserLocation = false
+
     // Measured *height* of the currently-rendered deal popup card, used to anchor it above the
-    // selected marker (see `popupAnchor(for:mapSize:cardHeight:)`). Seeded with the card's known
-    // `minHeight` so the very first popup placement (before the real measurement lands via
-    // `MapDealCardHeightPreferenceKey`) is already close, instead of momentarily sitting on top
-    // of the marker. Width is NOT measured — see `mapDealCardWidth` below for why.
-    @State private var mapDealCardHeight: CGFloat = 130
+    // selected marker (see `popupAnchor(for:mapSize:cardHeight:)`). Seeded with the card's
+    // approximate rendered height so the very first popup placement (before the real measurement
+    // lands via `MapDealCardHeightPreferenceKey`) is already close, instead of momentarily
+    // sitting on top of the marker. Width is NOT measured — see `mapDealCardWidth` below for why.
+    @State private var mapDealCardHeight: CGFloat = 160
 
     private static let mapMarkerWidth: CGFloat = 44
     private static let mapMarkerHeight = mapMarkerWidth * (200.0 / 167.0)
 
-    // Fixed "place card" width (not the full map width) — this is what makes horizontal
-    // anchoring possible at all. A card spanning nearly the full screen leaves the clamp in
-    // `popupAnchor` almost no room to move (its min/max collapse to the same center point),
-    // so on a wide card any attempt to actually track the marker's x position pushed it
-    // off-screen. A narrower, Google-Maps-style card gives the clamp real travel room while
-    // guaranteeing (by construction, not by racing an async size measurement) that it always
-    // stays fully on-screen.
-    private static let mapDealCardWidth: CGFloat = 260
-    private static let mapDealCardHorizontalMargin: CGFloat = SvSpacing.md
+    // Per the popup design: the card spans the map width minus a fixed 24pt margin on each
+    // side (`screenPadding`), capped at 520pt so it doesn't stretch edge-to-edge on iPad.
+    // On iPhone the horizontal clamp in `popupAnchor` therefore collapses to (near) center —
+    // the card sits centered while still tracking the marker vertically.
+    private static let mapDealCardMaxWidth: CGFloat = 520
+    private static let mapDealCardHorizontalMargin: CGFloat = SvSpacing.screenPadding
 
     // SwiftUI's `.onTapGesture` on `Map` also fires for taps that an annotation `Button` already
     // handled — annotation content lives in MapKit-managed (UIKit-hosted) layers, so SwiftUI's
@@ -243,7 +248,36 @@ struct HomeScreen: View {
                                                       
     // MARK: - Map View
 
+    /// Gates the real map behind location resolution: until a real location exists (GPS or a
+    /// manually confirmed one via `ConfirmLocationScreen`), the map area shows a loading
+    /// placeholder — never a map centered on the mock/fallback coordinate, and therefore no
+    /// markers or popups positioned around a fake location. Once the map has centered on a
+    /// real location once (`hasCenteredMapOnUserLocation`), it stays mounted regardless.
+    @ViewBuilder
     private var mapContent: some View {
+        if viewModel.currentLocation == nil && !hasCenteredMapOnUserLocation {
+            mapLocationPendingView
+        } else {
+            activeMapContent
+        }
+    }
+
+    /// Skeleton state per the UX rules (shimmer, not a bare centered spinner) shown while
+    /// location permission is pending or the fix is still being resolved.
+    private var mapLocationPendingView: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.svShimmer)
+                .svShimmer()
+            Text("Detecting location…")
+                .font(SvFont.caption)
+                .foregroundStyle(Color.svSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    private var activeMapContent: some View {
         let clusters = MapCluster.clustering(viewModel.mapPins, region: mapRegion)
 
         // Wrapped in `GeometryReader` (rather than measuring the `Map` itself) so the popup's
@@ -267,6 +301,11 @@ struct HomeScreen: View {
                                 }
                             }
                         )) {
+                            // The system blue current-location dot — standard indicator, not a
+                            // custom marker. Renders only once Core Location has a fix (which
+                            // is guaranteed here, since the map itself is gated on location).
+                            UserAnnotation()
+
                             ForEach(clusters) { cluster in
                                 Annotation(clusterLabel(cluster), coordinate: cluster.coordinate) {
                                     mapAnnotationView(cluster)
@@ -295,6 +334,7 @@ struct HomeScreen: View {
                         Map(
                             coordinateRegion: $mapRegion,
                             interactionModes: .all,
+                            showsUserLocation: true,   // System blue dot — iOS 16 equivalent of `UserAnnotation()`
                             annotationItems: clusters
                         ) { cluster in
                             MapAnnotation(coordinate: cluster.coordinate) {
@@ -324,16 +364,17 @@ struct HomeScreen: View {
                     // treated as needing to conform to `View`.
                     let _ = logPopupPresentationReached(selected, anchor: anchor)
 
-                    // Same `Button`/`mapDealCard` instance stays mounted across marker switches
+                    // Same `mapDealCard` instance stays mounted across marker switches
                     // (the `if let` only toggles on nil <-> non-nil, not on which pin is selected),
                     // so re-selecting a different marker animates this view to its new `anchor`
                     // instead of tearing it down and recreating it.
-                    Button {
-                        router.navigate(to: .dealDetail(dealId: selected.id))
-                    } label: {
-                        mapDealCard(selected)
-                    }
-                    .buttonStyle(.plain)
+                    //
+                    // Deliberately NOT wrapped in a navigation Button: only the card's own
+                    // "View Deal" button navigates. Taps elsewhere on the card land on this
+                    // gesture-less view and go nowhere — they neither navigate nor fall through
+                    // to the map's empty-area tap gesture (the card is a ZStack sibling drawn
+                    // above the map, not a child of it), so the popup also stays open.
+                    mapDealCard(selected)
                     .frame(width: mapDealCardWidth(in: geo.size.width))
                     .background(
                         GeometryReader { cardGeo in
@@ -358,9 +399,32 @@ struct HomeScreen: View {
         // resolving (or changing, e.g. via `ConfirmLocationScreen`) while the map is visible.
         // Pre-iOS-17 `onChange(of:perform:)` is used since this screen's deployment target is
         // below iOS 17.
-        .onAppear { syncMapRegion(from: viewModel.currentLocation) }
+        .onAppear {
+            // The popup must never survive re-entering the map — returning from Deal Details
+            // (back button or any other pop path) and list↔map toggles both land here, because
+            // `onAppear` re-fires whenever this view is uncovered (same mechanism the screen's
+            // `.task {}` relies on, per `HomeViewModel.onAppear`'s comment). Selecting a marker
+            // again is the only way to bring the popup back.
+            if viewModel.selectedPin != nil {
+                logPopupDismissedOnMapReturn()
+                viewModel.selectPin(nil)
+            }
+            // Center ONCE, on the first appearance that has a real location. Re-appearances
+            // (returning from Deal Details, list↔map toggles) deliberately skip this so the
+            // user's pan/zoom in `mapRegion` is preserved exactly — an unconditional sync here
+            // is what used to snap the map back to the location on every return.
+            if !hasCenteredMapOnUserLocation, viewModel.currentLocation != nil {
+                syncMapRegion(from: viewModel.currentLocation)
+                hasCenteredMapOnUserLocation = true
+            }
+        }
+        // Fires only when the location genuinely changes (first GPS fix while the map is
+        // visible, or a location manually confirmed on `ConfirmLocationScreen`) — never on
+        // navigation returns, so it can't clobber a preserved pan/zoom state.
         .onChange(of: viewModel.currentLocation) { newValue in
+            guard newValue != nil else { return }
             syncMapRegion(from: newValue)
+            hasCenteredMapOnUserLocation = true
         }
 
         // TEMPORARY DEBUG — logs the popup's gating state (`selectedPin`) every time it changes,
@@ -390,6 +454,26 @@ struct HomeScreen: View {
         Logger.map.debug("""
             [MAP DEBUG] Annotation tap — suppressing the empty-map tap gesture for the next \
             \(Self.emptyMapTapSuppressionWindow, privacy: .public)s (pass-through duplicate guard).
+            """)
+        #endif
+    }
+
+    private func logViewDealTapped(_ pin: DealMapPin) {
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] "View Deal" button tapped — navigating to deal detail for \
+            offerId=\(pin.id, privacy: .public), restaurantName=\(pin.restaurantName, privacy: .public). \
+            This button is the popup's only navigation path — taps elsewhere on the card do nothing.
+            """)
+        #endif
+    }
+
+    private func logPopupDismissedOnMapReturn() {
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] Map re-appeared with a stale selection (returned from Deal Details or \
+            switched back to map view) — dismissing the popup via selectPin(nil), per the \
+            "no popup on return" rule.
             """)
         #endif
     }
@@ -506,7 +590,7 @@ struct HomeScreen: View {
     /// map itself has room for (with margin on both sides). `popupAnchor` clamps against this
     /// exact same value, so the two can never disagree about how wide the card is.
     private func mapDealCardWidth(in mapWidth: CGFloat) -> CGFloat {
-        min(Self.mapDealCardWidth, max(mapWidth - Self.mapDealCardHorizontalMargin * 2, 0))
+        min(Self.mapDealCardMaxWidth, max(mapWidth - Self.mapDealCardHorizontalMargin * 2, 0))
     }
 
     /// Places the popup card's center just above the selected marker (its bottom edge sits
@@ -685,82 +769,83 @@ struct HomeScreen: View {
     }
 
     private func mapDealCard(_ pin: DealMapPin) -> some View {
-        HStack(alignment: .top, spacing: 0) {
+        VStack(alignment: .leading, spacing: SvSpacing.md) {
+            // MARK: - Top row: image · name/offer/hours · discount badge
+            HStack(alignment: .top, spacing: SvSpacing.md) {
+                dealCardImage(url: pin.imageUrl)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: SvSpacing.inputRadius))
+                    .accessibilityHidden(true)
 
-            // MARK: - Left Image
-            dealCardImage(url: pin.imageUrl)
-                .frame(width: 130, height: 130)
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: SvSpacing.cardRadius,
-                        bottomLeadingRadius: SvSpacing.cardRadius
-                    )
-                )
+                VStack(alignment: .leading, spacing: SvSpacing.xxs) {
+                    Text(pin.restaurantName)
+                        .font(SvFont.labelTitle)
+                        .foregroundStyle(Color.svLabel)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-            // MARK: - Right Content
-            VStack(alignment: .leading, spacing: 4) {
-                // Name + subtitle share the row with the badge so text can never run under it
-                HStack(alignment: .top, spacing: SvSpacing.sm) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(pin.restaurantName)
-                            .font(SvFont.bodySmallStrong)
-                            .foregroundStyle(Color.svLabel)
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 4) {
-                            Image("BowlFood")
-                                .resizable()
-                                .frame(width: 12, height: 12)
-
-                            Text("Burger Barn")
-                                .font(SvFont.caption)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .foregroundStyle(Color.svSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Invisible twin of the pinned badge — reserves its exact width in the
-                    // text flow so the name/subtitle never enter the badge's corner area
-                    discountBadge(pin.discountBadge)
-                        .hidden()
-                }
-
-                Text(pin.title)
-                    .font(SvFont.bodySmallStrong)
-                    .foregroundStyle(Color.svLabel)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.top, 2)
-
-                Text(pin.validTimeText)
-                    .font(SvFont.caption)
-                    .foregroundStyle(Color.svSecondary)
-                    .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    Image("MapPin")
-                        .resizable()
-                        .frame(width: 12, height: 12)
-
-                    Text(pin.distance)
+                    Text(pin.title)
                         .font(SvFont.caption)
+                        .foregroundStyle(Color.svLabel)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text(pin.validTimeText)
+                        .font(SvFont.caption)
+                        .foregroundStyle(Color.svSecondary)
                         .lineLimit(1)
                 }
-                .foregroundStyle(Color.svSecondary)
-            }
-            .padding(.leading, SvSpacing.md)
-            .padding(.trailing, 10) // Same inset the pinned badge keeps from the card edge
-            .padding(.vertical, 10) // Fixed top inset — identical whether the name is 1 or 2 lines
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
+                popupDiscountBadge(pin)
+            }
+
+            // MARK: - Distance (leading) + Open-now status (centered in the card, per design)
+            // ZStack rather than an HStack+Spacers so the chip is centered on the card's full
+            // width, independent of how wide the distance text happens to be.
+            ZStack {
+                HStack(spacing: SvSpacing.xs) {
+                    Image("ic_pinLocation")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 12, height: 12)
+                    Text(popupDistanceText(pin))
+                        .font(SvFont.caption)
+                        .foregroundStyle(Color.svSecondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if pin.isOpenNow {
+                    Text("Open now")
+                        .font(SvFont.captionStrong)
+                        .foregroundStyle(Color.svSuccess)
+                        .padding(.horizontal, SvSpacing.sm)
+                        .padding(.vertical, SvSpacing.xxs)
+                        .background(Capsule().fill(Color.svSuccess.opacity(0.12)))
+                }
+            }
+
+            // MARK: - View Deal (the popup's ONLY navigation affordance — the card
+            // itself is deliberately not tappable, see `mapContent`)
+            Button {
+                logViewDealTapped(pin)
+                router.navigate(to: .dealDetail(dealId: pin.id))
+            } label: {
+                Text("View Deal")
+                    .font(SvFont.buttonText)
+                    .foregroundStyle(Color.svOnPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                            .fill(Color.svPrimary)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View deal for \(pin.restaurantName)")
         }
-        .frame(minHeight: 130)
+        .padding(SvSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: SvSpacing.cardRadius)
                 .fill(Color.svOnPrimary)
@@ -771,11 +856,33 @@ struct HomeScreen: View {
                     y: 0
                 )
         )
-        // MARK: - Pinned Discount Badge (drawn in the slot the hidden twin reserved)
-        .overlay(alignment: .topTrailing) {
-            discountBadge(pin.discountBadge)
-                .padding([.top, .trailing], 10)
-        }
+    }
+
+    /// The popup's compact top-right badge (smaller than the list card's `discountBadge`,
+    /// per the popup design). Percent badges get the design's "X% off" wording; non-percent
+    /// badge text ("2-for-1", "Free") is shown verbatim — appending "off" there reads wrong.
+    private func popupDiscountBadge(_ pin: DealMapPin) -> some View {
+        let badge = pin.discountBadge
+        return Text(badge.hasSuffix("%") ? "\(badge) off" : badge)
+            .font(SvFont.captionStrong)
+            .foregroundStyle(Color.svOnPrimary)
+            .padding(.horizontal, SvSpacing.sm)
+            .padding(.vertical, SvSpacing.xxs)
+            .background(Capsule().fill(Color.svPrimary))
+            .fixedSize()
+            .layoutPriority(1)
+    }
+
+    /// Distance from the user's current location to the pin's restaurant, computed live —
+    /// the map-pins feed is fetched without lat/lng (see `loadMapPins`), so the server-side
+    /// `pin.distance` is empty on the map. Falls back to that server value (which the mock
+    /// pins populate) when the device location hasn't resolved yet.
+    private func popupDistanceText(_ pin: DealMapPin) -> String {
+        guard let location = viewModel.currentLocation else { return pin.distance }
+        let user = CLLocation(latitude: location.latitude, longitude: location.longitude)
+        let restaurant = CLLocation(latitude: pin.latitude, longitude: pin.longitude)
+        let km = user.distance(from: restaurant) / 1000
+        return String(format: "%.1f km", km)
     }
 
     // MARK: - Food Categories
