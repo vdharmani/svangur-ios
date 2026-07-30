@@ -1,5 +1,12 @@
 import SwiftUI
 import Combine
+import os
+
+// TEMPORARY — investigating why the map's deal popup doesn't open for some markers.
+// Remove this logging once the root cause is confirmed and fixed.
+private extension Logger {
+    static let map = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Svangur", category: "map")
+}
 
 @MainActor
 final class HomeViewModel: ObservableObject {
@@ -161,7 +168,25 @@ final class HomeViewModel: ObservableObject {
     }
 
     func selectPin(_ pin: DealMapPin?) {
+        #if DEBUG
+        if let pin {
+            let existsInMapPins = mapPins.contains(where: { $0.id == pin.id })
+            Logger.map.debug("""
+                [MAP DEBUG] selectPin(_:) callback triggered — offerId(pin.id)=\(pin.id, privacy: .public), \
+                restaurantName=\(pin.restaurantName, privacy: .public), offerTitle=\(pin.title, privacy: .public). \
+                restaurantId: not available — DealMapPin has no separate restaurantId field (only the offer id). \
+                existsInMapPinsDataSource=\(existsInMapPins, privacy: .public). \
+                No guard/validation exists in this method — it assigns `selectedPin` unconditionally, \
+                so a validation guard cannot be the reason a popup fails to open.
+                """)
+        } else {
+            Logger.map.debug("[MAP DEBUG] selectPin(_:) callback triggered with nil — deselecting, popup will be dismissed.")
+        }
+        #endif
         selectedPin = pin
+        #if DEBUG
+        Logger.map.debug("[MAP DEBUG] selectedPin state updated — selectedPin=\(String(describing: self.selectedPin?.id), privacy: .public).")
+        #endif
     }
 
     // MARK: - Private
@@ -287,7 +312,7 @@ final class HomeViewModel: ObservableObject {
     private func loadMapPins(lang: String) async {
         do throws(AppError) {
             let deals = try await getMapPinsUseCase.execute(lang: lang)
-            mapPins = deals.compactMap { $0.toMapPin() }
+            mapPins = deals.toMapPins()
         } catch {
             // Keep whatever pins are already on screen rather than clearing the map on failure.
         }

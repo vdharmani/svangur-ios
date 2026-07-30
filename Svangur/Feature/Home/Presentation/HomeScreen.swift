@@ -1,5 +1,12 @@
 import SwiftUI
 import MapKit
+import os
+
+// TEMPORARY — investigating why the map's deal popup doesn't open for some markers.
+// Remove this logging once the root cause is confirmed and fixed.
+private extension Logger {
+    static let map = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Svangur", category: "map")
+}
 
 struct HomeScreen: View {
     @EnvironmentObject private var router: AppRouter
@@ -38,6 +45,16 @@ struct HomeScreen: View {
     // stays fully on-screen.
     private static let mapDealCardWidth: CGFloat = 260
     private static let mapDealCardHorizontalMargin: CGFloat = SvSpacing.md
+
+    // SwiftUI's `.onTapGesture` on `Map` also fires for taps that an annotation `Button` already
+    // handled — annotation content lives in MapKit-managed (UIKit-hosted) layers, so SwiftUI's
+    // gesture arbitration doesn't treat the button as consuming the touch. That pass-through
+    // duplicate arrives within the same event cycle (~1 frame), dismissing the popup right after
+    // `selectPin(pin)` opened it. Every annotation tap stamps this deadline; the empty-map tap
+    // handler ignores taps arriving before it. The window is deliberately short — a real
+    // "tap marker, then tap empty area to dismiss" sequence takes far longer than 200ms.
+    @State private var suppressEmptyMapTapUntil = Date.distantPast
+    private static let emptyMapTapSuppressionWindow: TimeInterval = 0.2
 
     init(viewModel: HomeViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -235,7 +252,7 @@ struct HomeScreen: View {
         // (not just the `Map` inside it) ignores the bottom safe area so `geo.size` matches the
         // `Map`'s actual rendered bounds exactly, keeping the anchor math accurate all the way
         // to the bottom edge.
-        return GeometryReader { geo in
+        let baseMap = GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 Group {
                     if #available(iOS 17, *) {
@@ -286,15 +303,26 @@ struct HomeScreen: View {
                         }
                     }
                 }
-                // Annotation `Button`s consume their own tap before it reaches this gesture, so
-                // this only fires for taps on empty map area — deselecting the pin and dismissing
-                // the popup, same as tapping outside a Google Maps place card.
+                // Deselects the pin and dismisses the popup on empty-map taps, same as tapping
+                // outside a Google Maps place card. Annotation `Button`s do NOT reliably consume
+                // their tap before it reaches this gesture (see `suppressEmptyMapTapUntil`), so
+                // taps inside the suppression window stamped by an annotation tap are ignored —
+                // they're pass-through duplicates of that annotation tap, not real empty-area taps.
                 .onTapGesture {
+                    guard Date() >= suppressEmptyMapTapUntil else {
+                        logEmptyMapTapSuppressed()
+                        return
+                    }
+                    logEmptyMapAreaTapped()
                     viewModel.selectPin(nil)
                 }
 
                 if let selected = viewModel.selectedPin {
                     let anchor = popupAnchor(for: selected, mapSize: geo.size, cardHeight: mapDealCardHeight)
+                    // `let _ = ...` (not a bare call) — this sits inside `ZStack`'s `@ViewBuilder`
+                    // block, where a plain Void-returning expression statement would otherwise be
+                    // treated as needing to conform to `View`.
+                    let _ = logPopupPresentationReached(selected, anchor: anchor)
 
                     // Same `Button`/`mapDealCard` instance stays mounted across marker switches
                     // (the `if let` only toggles on nil <-> non-nil, not on which pin is selected),
@@ -334,6 +362,114 @@ struct HomeScreen: View {
         .onChange(of: viewModel.currentLocation) { newValue in
             syncMapRegion(from: newValue)
         }
+
+        // TEMPORARY DEBUG — logs the popup's gating state (`selectedPin`) every time it changes,
+        // including the exact reason the popup is absent when it's nil. Split into its own
+        // statement (rather than chained directly above) so the type-checker resolves `baseMap`'s
+        // type first — chaining it inline there made the whole modifier chain too complex for the
+        // type-checker ("unable to type-check this expression in reasonable time"). Remove this,
+        // and its call sites above, once the root cause is confirmed/fixed.
+        return baseMap.onChange(of: viewModel.selectedPin) { newValue in
+            logPopupStateChanged(newValue)
+        }
+    }
+
+    // MARK: - TEMPORARY DEBUG — map popup investigation
+    // Each of these is called as a single statement from inside a SwiftUI `ViewBuilder` closure
+    // above, rather than inlining the `#if DEBUG`/multi-line `Logger` calls directly in those
+    // closures — inlining them there made `mapContent`'s single giant ViewBuilder expression too
+    // complex for the type-checker ("unable to type-check this expression in reasonable time").
+    // Remove this whole section, and its call sites above, once the root cause is confirmed/fixed.
+
+    /// Stamps the deadline before which the empty-map `.onTapGesture` treats an incoming tap as
+    /// the pass-through duplicate of an annotation tap and ignores it — see
+    /// `suppressEmptyMapTapUntil`. Called from every annotation (marker + cluster) tap action.
+    private func suppressUpcomingEmptyMapTap() {
+        suppressEmptyMapTapUntil = Date().addingTimeInterval(Self.emptyMapTapSuppressionWindow)
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] Annotation tap — suppressing the empty-map tap gesture for the next \
+            \(Self.emptyMapTapSuppressionWindow, privacy: .public)s (pass-through duplicate guard).
+            """)
+        #endif
+    }
+
+    private func logEmptyMapTapSuppressed() {
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] Empty-map tap gesture fired inside the suppression window — it is the \
+            pass-through duplicate of the annotation tap just handled, NOT a real empty-area tap. \
+            selectPin(nil) NOT called; popup stays visible.
+            """)
+        #endif
+    }
+
+    private func logEmptyMapAreaTapped() {
+        #if DEBUG
+        Logger.map.debug("[MAP DEBUG] Empty map area tapped (outside suppression window) — calling viewModel.selectPin(nil) to dismiss popup.")
+        #endif
+    }
+
+    private func logIndividualMarkerTapped(_ pin: DealMapPin) {
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] Marker tapped — INDIVIDUAL marker (not a cluster). \
+            offerId(pin.id)=\(pin.id, privacy: .public), restaurantName=\(pin.restaurantName, privacy: .public), \
+            offerTitle=\(pin.title, privacy: .public). Note: DealMapPin has no separate restaurantId field — \
+            only the offer id is available here. Calling viewModel.selectPin(pin) now.
+            """)
+        #endif
+    }
+
+    private func logSelectPinCallbackReturned(_ pin: DealMapPin) {
+        #if DEBUG
+        Logger.map.debug("[MAP DEBUG] viewModel.selectPin(pin) callback returned for offerId=\(pin.id, privacy: .public).")
+        #endif
+    }
+
+    private func logClusterMarkerTapped(_ cluster: MapCluster) {
+        #if DEBUG
+        Logger.map.debug("""
+            [MAP DEBUG] Marker tapped — belongs to a CLUSTER. cluster.id=\(cluster.id, privacy: .public), \
+            pinCount=\(cluster.count, privacy: .public), \
+            containedOfferIds=\(cluster.pins.map(\.id), privacy: .public). \
+            selectPin(_:) is NOT called for cluster taps — zoomToCluster(_:) runs instead, \
+            so the deal popup will NOT open for this tap.
+            """)
+        #endif
+    }
+
+    private func logPopupPresentationReached(_ pin: DealMapPin, anchor: CGPoint) {
+        #if DEBUG
+        let existsInMapPins = viewModel.mapPins.contains(where: { $0.id == pin.id })
+        Logger.map.debug("""
+            [MAP DEBUG] Popup presentation method reached (mapDealCard) — \
+            selectedPin.id=\(pin.id, privacy: .public), \
+            restaurantName=\(pin.restaurantName, privacy: .public), \
+            existsInMapPinsDataSource=\(existsInMapPins, privacy: .public), \
+            popupAnchor=\(String(describing: anchor), privacy: .public). \
+            Popup WILL be shown (no guard blocks this branch once selectedPin is non-nil).
+            """)
+        #endif
+    }
+
+    private func logPopupStateChanged(_ pin: DealMapPin?) {
+        #if DEBUG
+        if let pin {
+            Logger.map.debug("""
+                [MAP DEBUG] Popup state changed — isPopupVisible=true, selectedPin.id=\(pin.id, privacy: .public), \
+                restaurantName=\(pin.restaurantName, privacy: .public).
+                """)
+        } else {
+            Logger.map.debug("""
+                [MAP DEBUG] Popup state changed — isPopupVisible=false (viewModel.selectedPin == nil). \
+                Reason: either (a) no marker has been tapped yet, (b) the empty map area was tapped \
+                (calls selectPin(nil)), or (c) the last tap landed on a CLUSTER marker — cluster taps \
+                call zoomToCluster(_:) instead of selectPin(_:), so they never set selectedPin and the \
+                popup never opens for that tap.
+                """)
+        }
+        #endif
     }
 
     private func syncMapRegion(from location: LocationSnapshot?) {
@@ -430,6 +566,8 @@ struct HomeScreen: View {
 
     private func mapClusterView(_ cluster: MapCluster) -> some View {
         Button {
+            logClusterMarkerTapped(cluster)
+            suppressUpcomingEmptyMapTap()
             zoomToCluster(cluster)
         } label: {
             ZStack {
@@ -464,7 +602,10 @@ struct HomeScreen: View {
         let isSelected = viewModel.selectedPin?.id == pin.id
 
         return Button {
+            logIndividualMarkerTapped(pin)
+            suppressUpcomingEmptyMapTap()
             viewModel.selectPin(pin)
+            logSelectPinCallbackReturned(pin)
         } label: {
             mapMarkerImage(url: pin.imageUrl)
                 .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
@@ -491,19 +632,27 @@ struct HomeScreen: View {
         return String(pin.restaurantName.prefix(Self.markerTitleCharacterLimit)) + "..."
     }
 
+    private func markerSubtitle(_ pin: DealMapPin) -> String {
+        pin.dealCount == 1 ? "1 Deal" : "\(pin.dealCount) Deals"
+    }
+
     private func mapPinLabel(_ pin: DealMapPin) -> some View {
         VStack(spacing: 0) {
             Text(markerTitle(pin))
                 .font(SvFont.captionStrong)
                 .foregroundStyle(Color.svOnBackground)
-            Text("\(pin.discountBadge) off")
+            Text(markerSubtitle(pin))
                 .font(SvFont.caption)
                 .foregroundStyle(Color.svSecondary)
         }
         .lineLimit(1)
         .truncationMode(.tail)
-        .frame(maxWidth: 140)
-        .fixedSize(horizontal: false, vertical: true)
+        // The `.overlay` hosting this label proposes the marker's own width (~44pt), so any
+        // proposal-respecting width (`.frame(maxWidth:)`) collapsed to that and re-truncated
+        // the title after a few characters. `.fixedSize()` sizes the label to its text
+        // instead — bounded by design, since `markerTitle` caps the string at
+        // `markerTitleCharacterLimit` (12) characters + "..." and the subtitle is "N Deals".
+        .fixedSize()
         .padding(.horizontal, SvSpacing.xs)
         .padding(.vertical, SvSpacing.xxs)
         .background(
