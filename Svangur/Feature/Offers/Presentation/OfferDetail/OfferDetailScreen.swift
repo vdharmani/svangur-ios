@@ -210,14 +210,18 @@ struct OfferDetailScreen: View {
         // A single uniform `spacing:` value (rather than a flexible `Spacer`) so the gap between
         // the discount pill and the first chip matches the gap between chips exactly, regardless
         // of how many of the conditional location/website/call chips actually render.
-        HStack(alignment: .center, spacing: SvSpacing.lg) {
+        HStack(alignment: .center, spacing: SvSpacing.sm) {
+            // Content-hugging (text + padding) while the chips flex to share the leftover
+            // width — on every iPhone width this leaves the badge slightly wider than each
+            // individual chip, without hardcoding any widths.
             Text(offer.discountBadgeText)
                 .font(SvFont.bodySmallStrong)
                 .foregroundStyle(Color.svPrimary)
                 .padding(.horizontal, SvSpacing.xl)
-                .frame(height: 44)
+                .frame(height: 52)
                 .background(Color.white, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+                .layoutPriority(1)
 
             if let latitude = offer.latitude, let longitude = offer.longitude {
                 actionChip(image: "MapPinArea", label: "Location") {
@@ -237,6 +241,7 @@ struct OfferDetailScreen: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func openInMaps(latitude: Double, longitude: Double, name: String) {
@@ -257,17 +262,23 @@ struct OfferDetailScreen: View {
             Image(image)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)   // Matches DealDetailScreen's action chip icons
         }
     }
 
+    /// White capsule chips with flexible, equal widths: each chip's `maxWidth: .infinity`
+    /// claims an equal share of whatever width the badge (which has `layoutPriority(1)`)
+    /// leaves over, so the row fills the screen on every device without hardcoded widths.
+    /// Icon stays centered; the whole capsule is tappable.
     @ViewBuilder
     private func actionChip(label: String, action: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
         Button(action: action) {
             icon()
-                .frame(width: 44, height: 44)
-                .background(Color.white, in: Circle())
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color.white, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
     }

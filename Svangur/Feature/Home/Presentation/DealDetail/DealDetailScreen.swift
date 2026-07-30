@@ -71,8 +71,9 @@ struct DealDetailScreen: View {
             heroImage(deal)
             actionRow(deal)
                 .padding(.horizontal, 20)
-                .offset(y: -22)
-                .padding(.bottom, -22)
+                // Half the row's 52pt height — keeps the row straddling the hero's bottom edge.
+                .offset(y: -26)
+                .padding(.bottom, -26)
         }
     }
 
@@ -142,12 +143,15 @@ struct DealDetailScreen: View {
 
     @ViewBuilder
     private func actionRow(_ deal: DealDetailUi) -> some View {
-        HStack(spacing: SvSpacing.sm) {
+        // The whole group hugs its content and centers on the screen: the badge is a
+        // content-sized pill (not stretched to fill the row), every element shares the same
+        // 44pt height and vertical center, and the single HStack spacing keeps the gap
+        // between the badge and each circular button identical.
+        HStack(alignment: .center, spacing: SvSpacing.sm) {
             Text(deal.discountBadge)
                 .font(SvFont.bodySmallStrong)
                 .foregroundStyle(Color.svPrimary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
+                .frame(width: 130, height: 52)
                 .background(Color.white, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
 
@@ -158,11 +162,12 @@ struct DealDetailScreen: View {
             }
 
             if let phone = deal.phone, !phone.isEmpty {
-                actionChip(systemImage: "phone.fill", label: "Call") {
+                actionChip(image: "PhoneCall", label: "Call") {
                     call(phone)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func openInMaps(latitude: Double, longitude: Double, name: String) {
@@ -181,7 +186,7 @@ struct DealDetailScreen: View {
     private func actionChip(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
         actionChip(label: label, action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.svPrimary)
         }
     }
@@ -192,17 +197,21 @@ struct DealDetailScreen: View {
             Image(image)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)
         }
     }
 
+    /// Per the reference design: the white background fills the whole 78×52 container as a
+    /// capsule (fully rounded 26pt ends), with the icon centered inside. The full container
+    /// is tappable — comfortably above the 44pt accessibility minimum.
     @ViewBuilder
     private func actionChip(label: String, action: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
         Button(action: action) {
             icon()
-                .frame(width: 44, height: 44)
-                .background(Color.white, in: Circle())
+                .frame(width: 78, height: 52)
+                .background(Color.white, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
     }
