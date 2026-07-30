@@ -304,6 +304,11 @@ struct AddOfferScreen: View {
                         viewModel.draft.title = String(new.prefix(ValidateOfferDraftUseCase.titleMaxLength))
                     }
                 }
+            if !viewModel.draft.title.isEmpty {
+                Text("Preview: \(viewModel.draft.title) and pasta")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 FieldErrorText(field: .title, error: viewModel.displayError(for: .title))
                 Spacer()
@@ -759,10 +764,17 @@ private struct FieldErrorText: View {
     private func message(for error: ValidationError) -> LocalizedStringKey {
         switch error {
         case .empty:                return emptyMessage
-        case .tooShort(let min):    return "Must be at least \(min) characters"
+        case .tooShort(let min):    return tooShortMessage(min: min)
         case .tooLong(let max):     return "Must be \(max) characters or fewer"
         case .invalidFormat:        return "Please enter a valid value"
         case .custom:               return "End time must be after start time"
+        }
+    }
+
+    private func tooShortMessage(min: Int) -> LocalizedStringKey {
+        switch field {
+        case .title: return "Title must be atleast \(min) characters."
+        default:     return "Must be at least \(min) characters"
         }
     }
 

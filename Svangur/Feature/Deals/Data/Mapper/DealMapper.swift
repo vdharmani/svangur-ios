@@ -80,7 +80,8 @@ extension DealCategoryFilterDTO {
             slug: "",
             nameEn: label,
             nameIs: label,
-            sortOrder: 0
+            sortOrder: 0,
+            iconUrl: iconUrl
         )
     }
 }

@@ -472,6 +472,45 @@ struct HomeScreen: View {
                 .animation(.easeInOut(duration: 0.15), value: isSelected)
         }
         .accessibilityLabel("\(pin.restaurantName), \(pin.discountBadge) off")
+        // `.overlay` keeps this label out of the button's own layout size, so it doesn't
+        // shift the marker's `Annotation` anchor point (default `.center`) away from its
+        // coordinate — the alignmentGuide override then pushes the label below the
+        // marker's bottom edge instead of the flush placement `.overlay(alignment: .bottom)`
+        // would otherwise give it.
+        .overlay(alignment: .bottom) {
+            mapPinLabel(pin)
+                .alignmentGuide(.bottom) { d in d[.top] - SvSpacing.xxs }
+                .accessibilityHidden(true)
+        }
+    }
+
+    private static let markerTitleCharacterLimit = 12
+
+    private func markerTitle(_ pin: DealMapPin) -> String {
+        guard pin.restaurantName.count > Self.markerTitleCharacterLimit else { return pin.restaurantName }
+        return String(pin.restaurantName.prefix(Self.markerTitleCharacterLimit)) + "..."
+    }
+
+    private func mapPinLabel(_ pin: DealMapPin) -> some View {
+        VStack(spacing: 0) {
+            Text(markerTitle(pin))
+                .font(SvFont.captionStrong)
+                .foregroundStyle(Color.svOnBackground)
+            Text("\(pin.discountBadge) off")
+                .font(SvFont.caption)
+                .foregroundStyle(Color.svSecondary)
+        }
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: 140)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, SvSpacing.xs)
+        .padding(.vertical, SvSpacing.xxs)
+        .background(
+            RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
+                .fill(Color.svSurface)
+                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+        )
     }
 
     /// `markerRestruent` is a full pin+pointer graphic with a circular cutout — sized here
@@ -612,12 +651,16 @@ struct HomeScreen: View {
                         imageName: "sandwich"
                     )
                     ForEach(viewModel.categories, id: \.id) { category in
+                        // Fallback icon (used while `category.iconURL` loads and if it fails
+                        // to load) is still keyed off `slug` via `categoryIconAssets(for:)` —
+                        // unchanged from before this API-driven icon was added.
                         let icon = categoryIconAssets(for: category.slug)
                         let name = category.localizedName(for: languageService.current)
                         categoryItem(
                             label: Text(verbatim: name),
                             accessibilityName: name,
                             categoryId: category.id,
+                            iconUrl: category.iconURL,
                             imageName: icon.imageName,
                             symbolName: icon.symbolName
                         )
@@ -634,6 +677,7 @@ struct HomeScreen: View {
         label: Text,
         accessibilityName: String,
         categoryId: String?,
+        iconUrl: URL? = nil,
         imageName: String? = nil,
         symbolName: String? = nil
     ) -> some View {
@@ -646,7 +690,7 @@ struct HomeScreen: View {
             VStack(spacing: SvSpacing.md) {
 
                 ZStack(alignment: .topTrailing) {
-                    categoryIcon(imageName: imageName, symbolName: symbolName)
+                    categoryIcon(iconUrl: iconUrl, imageName: imageName, symbolName: symbolName)
                         .frame(width: 60, height: 60)
                         .clipShape(Circle())
                         .overlay(
@@ -700,8 +744,39 @@ struct HomeScreen: View {
         }
     }
 
+    /// Loads the category icon from the API's `icon_url` when present, via `AsyncImage` (the
+    /// same image-loading approach used elsewhere in this screen, e.g. `dealCardImage(url:)`) —
+    /// shimmer placeholder while it loads, existing bundled/SF-Symbol icon
+    /// (`categoryIconFallback`) if the URL is missing or the load fails.
     @ViewBuilder
-    private func categoryIcon(imageName: String?, symbolName: String?) -> some View {
+    private func categoryIcon(iconUrl: URL?, imageName: String?, symbolName: String?) -> some View {
+        if let iconUrl {
+            AsyncImage(url: iconUrl, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                case .empty:
+                    Circle()
+                        .fill(Color.svShimmer)
+                        .svShimmer()
+                case .failure:
+                    categoryIconFallback(imageName: imageName, symbolName: symbolName)
+                @unknown default:
+                    categoryIconFallback(imageName: imageName, symbolName: symbolName)
+                }
+            }
+        } else {
+            categoryIconFallback(imageName: imageName, symbolName: symbolName)
+        }
+    }
+
+    /// The pre-existing local/SF-Symbol icon rendering — unchanged, now also used as the
+    /// on-failure/no-URL fallback for `categoryIcon(iconUrl:imageName:symbolName:)`.
+    @ViewBuilder
+    private func categoryIconFallback(imageName: String?, symbolName: String?) -> some View {
         if let imageName {
             Image(imageName)
                 .resizable()

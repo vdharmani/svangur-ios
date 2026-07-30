@@ -33,7 +33,7 @@ final class SearchViewModel: ObservableObject {
     nonisolated(unsafe) private var searchTask: Task<Void, Never>?
 
     private static let recentSearchesKey = "recent_searches"
-    private static let maxRecentSearches = 10
+    private static let maxRecentSearches = 5
 
     init(
         searchOffersUseCase: SearchOffersUseCaseProtocol,
