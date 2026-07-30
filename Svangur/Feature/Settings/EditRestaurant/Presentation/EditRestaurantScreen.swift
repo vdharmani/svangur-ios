@@ -16,6 +16,15 @@ struct EditRestaurantScreen: View {
         case camera, library
     }
 
+    /// Keyboard-focus targets, in the form's top-to-bottom layout order — same pattern as
+    /// `RegisterRestaurantScreen.Field`. Drives Next-key traversal and the "focus the first
+    /// invalid field on Save" behavior.
+    private enum Field: Hashable {
+        case nameEn, nameIs, phone, address, descriptionEn, descriptionIs
+    }
+
+    @FocusState private var focusedField: Field?
+
     init(viewModel: EditRestaurantViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
     }
@@ -39,6 +48,7 @@ struct EditRestaurantScreen: View {
                 ScrollView {
                     form
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
         .background(Color.svBackground.ignoresSafeArea())
@@ -141,11 +151,21 @@ struct EditRestaurantScreen: View {
                     .background(pinkFieldBackground)
             }
             fieldSection(heading: "Phone Number") {
-                pinkTextField(text: $viewModel.phoneNumber, keyboard: .phonePad, contentType: .telephoneNumber)
-                    .onChange(of: viewModel.phoneNumber) { newValue in
-                        let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
-                        if clamped != newValue { viewModel.phoneNumber = clamped }
-                    }
+                pinkTextField(
+                    text: $viewModel.phoneNumber,
+                    keyboard: .phonePad,
+                    contentType: .telephoneNumber,
+                    field: .phone,
+                    next: .address
+                )
+                .onChange(of: viewModel.phoneNumber) { newValue in
+                    let clamped = newValue.clampedToMaxDigits(ValidateCredentialsUseCase.phoneMaxLength)
+                    if clamped != newValue { viewModel.phoneNumber = clamped }
+                }
+                fieldErrorText(
+                    viewModel.validation.phoneNumber,
+                    emptyMessage: "Please enter phone number"
+                )
             }
             locationSection
             descriptionSection
@@ -156,6 +176,13 @@ struct EditRestaurantScreen: View {
                 title: "Save Changes",
                 isLoading: viewModel.state == .saving
             ) {
+                // Same flow as RegisterRestaurantScreen's Continue button: validate first,
+                // and if anything is invalid, focus the first invalid text field (which also
+                // opens the keyboard) instead of submitting.
+                guard viewModel.validateForSave() else {
+                    focusFirstInvalidField()
+                    return
+                }
                 Task { await viewModel.save() }
             }
             .padding(.top, SvSpacing.sm)
@@ -183,7 +210,12 @@ struct EditRestaurantScreen: View {
             }
 
             if viewModel.isEnglishNameSelected {
-                pinkTextField(text: $viewModel.nameEn, autocapitalization: .words)
+                pinkTextField(
+                    text: $viewModel.nameEn,
+                    autocapitalization: .words,
+                    field: .nameEn,
+                    next: viewModel.isIcelandicNameSelected ? .nameIs : .phone
+                )
                     .onChange(of: viewModel.nameEn) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
@@ -197,7 +229,12 @@ struct EditRestaurantScreen: View {
                 )
             }
             if viewModel.isIcelandicNameSelected {
-                pinkTextField(text: $viewModel.nameIs, autocapitalization: .words)
+                pinkTextField(
+                    text: $viewModel.nameIs,
+                    autocapitalization: .words,
+                    field: .nameIs,
+                    next: .phone
+                )
                     .onChange(of: viewModel.nameIs) { newValue in
                         let filtered = newValue.filteredToLettersAndSpaces(
                             maxLength: ValidateCredentialsUseCase.restaurantNameMaxLength
@@ -218,9 +255,13 @@ struct EditRestaurantScreen: View {
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: SvSpacing.sm) {
             fieldSection(heading: "Location") {
-                pinkTextField(text: $viewModel.address, autocapitalization: .words)
-                    .submitLabel(.search)
-                    .onSubmit { viewModel.searchAddressNow() }
+                pinkTextField(
+                    text: $viewModel.address,
+                    autocapitalization: .words,
+                    field: .address,
+                    submitLabel: .search,
+                    onSubmitAction: { viewModel.searchAddressNow() }
+                )
             }
 
             if !viewModel.addressSuggestions.isEmpty {
@@ -278,11 +319,11 @@ struct EditRestaurantScreen: View {
             }
 
             if viewModel.isEnglishDescriptionSelected {
-                pinkMultilineField(text: $viewModel.descriptionEn)
+                pinkMultilineField(text: $viewModel.descriptionEn, field: .descriptionEn)
                 fieldErrorText(viewModel.validation.descriptionEn, emptyMessage: "Please enter a description")
             }
             if viewModel.isIcelandicDescriptionSelected {
-                pinkMultilineField(text: $viewModel.descriptionIs)
+                pinkMultilineField(text: $viewModel.descriptionIs, field: .descriptionIs)
                 fieldErrorText(viewModel.validation.descriptionIs, emptyMessage: "Please enter a description")
             }
         }
@@ -310,6 +351,26 @@ struct EditRestaurantScreen: View {
             .appendingPathExtension("jpg")
         guard (try? data.write(to: url)) != nil else { return }
         viewModel.addImage(url)
+    }
+
+    /// Mirrors `RegisterRestaurantScreen.focusFirstInvalidBasicInfoField()`: walks the form in
+    /// layout order and focuses the first field whose validation failed, which also opens the
+    /// keyboard. Fields hidden by a deselected language chip are skipped — their error can't be
+    /// fixed from an invisible field. Errors with no focusable text field (images, opening
+    /// hours) leave focus alone; their inline error text is already visible.
+    private func focusFirstInvalidField() {
+        guard viewModel.validation.images == nil else { return }
+        if viewModel.isEnglishNameSelected, viewModel.validation.nameEn != nil {
+            focusedField = .nameEn
+        } else if viewModel.isIcelandicNameSelected, viewModel.validation.nameIs != nil {
+            focusedField = .nameIs
+        } else if viewModel.validation.phoneNumber != nil {
+            focusedField = .phone
+        } else if viewModel.isEnglishDescriptionSelected, viewModel.validation.descriptionEn != nil {
+            focusedField = .descriptionEn
+        } else if viewModel.isIcelandicDescriptionSelected, viewModel.validation.descriptionIs != nil {
+            focusedField = .descriptionIs
+        }
     }
 
     @ViewBuilder
@@ -359,11 +420,19 @@ struct EditRestaurantScreen: View {
             .fill(Color.svFieldBackground)
     }
 
+    /// Focus/submit wiring mirrors `RegisterRestaurantScreen`'s text-field builder: the field
+    /// registers itself with `focusedField`, the return key reads "Next" when a `next` field
+    /// exists ("Done" otherwise), and submitting either runs `onSubmitAction` or advances
+    /// focus to `next`. Visual styling is unchanged.
     private func pinkTextField(
         text: Binding<String>,
         keyboard: UIKeyboardType = .default,
         contentType: UITextContentType? = nil,
-        autocapitalization: TextInputAutocapitalization = .never
+        autocapitalization: TextInputAutocapitalization = .never,
+        field: Field? = nil,
+        next: Field? = nil,
+        submitLabel: SubmitLabel? = nil,
+        onSubmitAction: (() -> Void)? = nil
     ) -> some View {
         TextField("", text: text)
             .font(SvFont.timeValue)
@@ -372,17 +441,27 @@ struct EditRestaurantScreen: View {
             .textContentType(contentType)
             .textInputAutocapitalization(autocapitalization)
             .autocorrectionDisabled(true)
+            .focused($focusedField, equals: field)
+            .submitLabel(submitLabel ?? (next == nil ? .done : .next))
+            .onSubmit {
+                if let onSubmitAction {
+                    onSubmitAction()
+                } else {
+                    focusedField = next
+                }
+            }
             .padding(.horizontal, 18)
             .frame(height: SvSpacing.inputHeight)
             .background(pinkFieldBackground)
     }
 
-    private func pinkMultilineField(text: Binding<String>) -> some View {
+    private func pinkMultilineField(text: Binding<String>, field: Field? = nil) -> some View {
         TextField("", text: text, axis: .vertical)
             .font(SvFont.timeValue)
             .foregroundStyle(Color.svOnBackground)
             .textInputAutocapitalization(.sentences)
             .autocorrectionDisabled(true)
+            .focused($focusedField, equals: field)
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
             .frame(height: 100, alignment: .topLeading)
@@ -500,11 +579,12 @@ struct EditRestaurantScreen: View {
                 .font(SvFont.label)
                 .foregroundStyle(Color.svOnBackground)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                VStack(spacing: SvSpacing.sm) {
-                    ForEach(Weekday.allCases) { day in
-                        openingHourRow(for: day)
-                    }
+            // Each day gets its own `ScrollView` (mirroring RegisterRestaurantScreen) so
+            // dragging one day's row can never move — or borrow scroll state from — any
+            // other day's row.
+            VStack(spacing: SvSpacing.sm) {
+                ForEach(Weekday.allCases) { day in
+                    openingHourRow(for: day)
                 }
             }
 
@@ -520,6 +600,8 @@ struct EditRestaurantScreen: View {
     private func openingHourRow(for day: Weekday) -> some View {
         let schedule = viewModel.openingHours[day] ?? EditDaySchedule(day: day)
         let isOpen = !schedule.isClosed
+        let isInvalid = viewModel.invalidOpeningHoursDays.contains(day)
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: SvSpacing.sm) {
             Text(day.shortName)
                 .font(SvFont.caption)
@@ -557,8 +639,12 @@ struct EditRestaurantScreen: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SvSpacing.inputRadius)
-                .stroke(Color.svDivider, lineWidth: 1)
+                .stroke(
+                    isInvalid ? Color.svError : Color.svDivider,
+                    lineWidth: isInvalid ? 1.5 : 1
+                )
         )
+        }
     }
 }
 

@@ -292,7 +292,7 @@ struct AddOfferScreen: View {
     private var titleSection: some View {
         VStack(alignment: .leading, spacing: 13) {
             sectionLabel("Offer Title")
-            TextField("e.g. 30% off all pizzas", text: $viewModel.draft.title)
+            TextField("e.g. 30% off all pizzas and pasta", text: $viewModel.draft.title)
                 .textFieldStyle(SvFieldStyle())
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
@@ -773,8 +773,8 @@ private struct FieldErrorText: View {
 
     private func tooShortMessage(min: Int) -> LocalizedStringKey {
         switch field {
-        case .title: return "Title must be atleast \(min) characters."
-        default:     return "Must be at least \(min) characters"
+        case .title: return "Offer title must be atleast \(min) characters."
+        default:     return " OfferMust be at least \(min) characters"
         }
     }
 

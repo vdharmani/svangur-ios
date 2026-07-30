@@ -7,7 +7,7 @@ final class EditRestaurantViewModel: ObservableObject {
     @Published var nameIs: String = ""        { didSet { revalidateIfTouched() } }
     /// Read-only — the update API has no `email` field, so this is display-only.
     @Published private(set) var adminEmail: String = ""
-    @Published var phoneNumber: String = ""
+    @Published var phoneNumber: String = "" { didSet { revalidateIfTouched() } }
     @Published var descriptionEn: String = "" { didSet { revalidateIfTouched() } }
     @Published var descriptionIs: String = "" { didSet { revalidateIfTouched() } }
     @Published var address: String = ""
@@ -98,6 +98,12 @@ final class EditRestaurantViewModel: ObservableObject {
     /// under the Opening Hours table, cleared as soon as a toggle actually succeeds.
     @Published private(set) var openingHoursError: String?
 
+    /// Enabled days whose Close Time is at or before their Open Time — populated by `save()`,
+    /// and re-checked after every edit once non-empty so fixing a flagged day clears its
+    /// highlight live. Drives the red highlight on each invalid day's row. Mirrors
+    /// `RegisterRestaurantViewModel.invalidOpeningHoursDays` exactly.
+    @Published private(set) var invalidOpeningHoursDays: Set<Weekday> = []
+
     func toggleDayOpen(_ day: Weekday) {
         let schedule = openingHours[day] ?? EditDaySchedule(day: day)
         if !schedule.isClosed {
@@ -114,6 +120,7 @@ final class EditRestaurantViewModel: ObservableObject {
             closeTime: schedule.closeTime,
             isClosed: !schedule.isClosed
         )
+        refreshOpeningHoursValidationIfNeeded()
     }
 
     func setOpenTime(_ time: String, for day: Weekday) {
@@ -124,6 +131,7 @@ final class EditRestaurantViewModel: ObservableObject {
             closeTime: schedule.closeTime,
             isClosed: schedule.isClosed
         )
+        refreshOpeningHoursValidationIfNeeded()
     }
 
     func setCloseTime(_ time: String, for day: Weekday) {
@@ -134,6 +142,46 @@ final class EditRestaurantViewModel: ObservableObject {
             closeTime: time,
             isClosed: schedule.isClosed
         )
+        refreshOpeningHoursValidationIfNeeded()
+    }
+
+    /// Re-runs the opening-hours time-range check after an edit — but only once a save attempt
+    /// has already surfaced it, so fixing a flagged day's times clears its highlight/message
+    /// immediately instead of requiring another Save tap. Never runs before the first Save
+    /// attempt, matching the Register screen's "errors appear on submit, then update live"
+    /// pattern.
+    private func refreshOpeningHoursValidationIfNeeded() {
+        guard !invalidOpeningHoursDays.isEmpty else { return }
+        let stillInvalid = Self.invalidOpeningHoursDays(in: openingHours)
+        invalidOpeningHoursDays = Set(stillInvalid)
+        openingHoursError = stillInvalid.isEmpty ? nil : Self.openingHoursErrorMessage(for: stillInvalid)
+    }
+
+    /// Enabled days (in Monday–Sunday order) whose Close Time isn't after their Open Time.
+    /// Same rule as `RegisterRestaurantViewModel`, adapted to this screen's `"HH:mm"` strings.
+    private static func invalidOpeningHoursDays(in schedule: [Weekday: EditDaySchedule]) -> [Weekday] {
+        func minutes(_ hhmm: String) -> Int {
+            let parts = hhmm.split(separator: ":").compactMap { Int($0) }
+            return (parts.first ?? 0) * 60 + (parts.count > 1 ? parts[1] : 0)
+        }
+        return Weekday.allCases.filter { day in
+            guard let daySchedule = schedule[day], !daySchedule.isClosed else { return false }
+            return minutes(daySchedule.closeTime) <= minutes(daySchedule.openTime)
+        }
+    }
+
+    private static func openingHoursErrorMessage(for days: [Weekday]) -> String {
+        let names = days.map(\.fullName)
+        let joined: String
+        switch names.count {
+        case 1:
+            joined = names[0]
+        case 2:
+            joined = "\(names[0]) and \(names[1])"
+        default:
+            joined = names.dropLast().joined(separator: ", ") + ", and \(names.last ?? "")"
+        }
+        return "Please fix the invalid opening hours for \(joined)."
     }
 
     // MARK: - Address autocomplete
@@ -202,10 +250,27 @@ final class EditRestaurantViewModel: ObservableObject {
         revalidateIfTouched()
     }
 
-    func save() async {
+    /// Runs the full pre-save validation synchronously (fields + opening-hours time ranges),
+    /// surfacing every error, and reports whether the form can actually be saved. Called by
+    /// the Save button *before* it decides whether to focus the first invalid field (mirroring
+    /// the Register screen's `validateBasicInfoStep()` + focus pattern), and re-run defensively
+    /// inside `save()` itself.
+    @discardableResult
+    func validateForSave() -> Bool {
         hasAttemptedSave = true
         revalidate()
-        guard validation.isValid else { return }
+
+        let invalidDays = Self.invalidOpeningHoursDays(in: openingHours)
+        invalidOpeningHoursDays = Set(invalidDays)
+        if !invalidDays.isEmpty {
+            openingHoursError = Self.openingHoursErrorMessage(for: invalidDays)
+        }
+
+        return validation.isValid && invalidDays.isEmpty
+    }
+
+    func save() async {
+        guard validateForSave() else { return }
 
         state = .saving
         do throws(AppError) {
@@ -225,11 +290,24 @@ final class EditRestaurantViewModel: ObservableObject {
         validation = EditRestaurantValidation(
             nameEn: Self.validateRestaurantNameField(effectiveNameEn),
             nameIs: Self.validateRestaurantNameField(effectiveNameIs),
+            phoneNumber: Self.validatePhoneNumberField(phoneNumber),
             descriptionEn: effectiveDescriptionEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .empty : nil,
             descriptionIs: effectiveDescriptionIs.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .empty : nil,
             images: (existingImageURLs.count + newImageRefs.count) == 0
                 ? .custom(messageKey: "Please add at least one image.") : nil
         )
+    }
+
+    /// Same rule as `ValidateCredentialsUseCase.validatePhoneNumber` (Register Restaurant) —
+    /// kept in sync (via the shared `phoneMinLength`/`phoneMaxLength` limits) so both screens
+    /// enforce an identical phone policy.
+    private static func validatePhoneNumberField(_ phone: String) -> ValidationError? {
+        let digits = phone.filter(\.isNumber)
+        if digits.isEmpty { return .empty }
+        if digits.count < ValidateCredentialsUseCase.phoneMinLength || digits.count > ValidateCredentialsUseCase.phoneMaxLength {
+            return .custom(messageKey: "Phone number should be between 7 to 15 digits")
+        }
+        return nil
     }
 
     /// Same minimum length as `ValidateCredentialsUseCase.restaurantNameMinLength` (Register

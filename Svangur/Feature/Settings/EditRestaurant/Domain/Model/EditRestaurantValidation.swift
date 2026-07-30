@@ -6,11 +6,13 @@ import Foundation
 struct EditRestaurantValidation: Sendable, Equatable {
     var nameEn: ValidationError?
     var nameIs: ValidationError?
+    var phoneNumber: ValidationError?
     var descriptionEn: ValidationError?
     var descriptionIs: ValidationError?
     var images: ValidationError?
 
     var isValid: Bool {
-        nameEn == nil && nameIs == nil && descriptionEn == nil && descriptionIs == nil && images == nil
+        nameEn == nil && nameIs == nil && phoneNumber == nil &&
+        descriptionEn == nil && descriptionIs == nil && images == nil
     }
 }
