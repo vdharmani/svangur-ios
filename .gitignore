@@ -1,6 +1,6 @@
 # Secrets — never commit
-Svangur/DebugSecret.xcconfig
-Svangur/releaseSecret.xcconfig
+Svangur/ConfigFile/DebugSecret.xcconfig
+Svangur/ConfigFile/releaseSecret.xcconfig
 
 # Xcode
 DerivedData/
